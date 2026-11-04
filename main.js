@@ -143,8 +143,9 @@ let grid = new Uint8Array(W * H), piece = null, next = null, score = 0, lines = 
 let state = 'intro', overAt = 0, holdLeft = 0, holdTime = 3, fallAcc = 0, sandAcc = 0, diff = loadDiff();
 let flash = null, flashMask = null, flashT = 0, frame = 0, g0 = null, combo = makeCombo(COMBO_TIME);
 let touchFast = false, shake = 0, quake = 0, shown = '', scale = 1; // scale: css px per grain, set by fit()
-let fire = [], extras = loadExtras(), helps = fullHelps(), carry = null; // carry: the help being dragged, { tool, at: [gx, gy] | null, armed }
-let stats = loadStats(), usedHelp = false, gameFruits = new Set(), adUsed = false; // per game: a help used, fruits cleared, the rescue ad watched
+let fire = [], extras = loadExtras(), helps = fullHelps(), carry = null; // carry: the help waiting for a tap, { tool, at: [gx, gy] | null, mid }
+let keepPiece = false; // a help used mid-game (from the 💪 window): the falling fruit stays after the sand settles
+let stats = loadStats(), usedHelp = false, gameFruits = new Set(); // per game: a help used, fruits cleared
 checkWeek();
 let quakeT = 0, rainbowOn = false, rainbows = loadRainbows(), mode = loadMode(), playT = 0, infoShown = '';
 const carryEl = $('carry');
@@ -225,7 +226,7 @@ const fireLevel = () => combo.mult >= 7 ? 3 : combo.mult >= 5 ? 2 : combo.mult >
 // sand with a gap waits at the bottom, the fruits are bananas, and each step waits for the player to do what it says.
 // Nothing in it counts: no stats, scores or achievements.
 const TUT_GAP = [38, 62]; // columns of the gap in the tutorial floor
-const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', lose: 'tutLose', done: 'tutDone' };
+const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', power: 'tutPower', lose: 'tutLose', done: 'tutDone' };
 const ARROW = ['..###..', '..###..', '..###..', '#######', '.#####.', '..###..', '...#...'];
 let tut = null; // while it runs: { step, x0, landed, freeze, saved: { mode, diff } }
 const tutSeen = () => { try { return localStorage.getItem('tutDone') === '1'; } catch { return false; } };
@@ -243,6 +244,7 @@ function startTutorial() {
 function tutStep(step) {
   tut.step = step; tut.freeze = step === 'cleared' || step === 'lose' || step === 'done'; // reading time: the game waits
   if (step === 'cleared') sfx.prize();
+  if (step === 'power') tutFill();
   tutShow();
 }
 function tutShow(key = TUT_TEXT[tut.step]) {
@@ -251,6 +253,12 @@ function tutShow(key = TUT_TEXT[tut.step]) {
   $('tutSkip').hidden = tut.step === 'done';
   $('tut').style.top = `${cv.getBoundingClientRect().top + (HOLD_ROWS + 6) * scale}px`; // just under the waiting fruit
   $('tut').hidden = false;
+}
+// For the power-up step: the lower half of the well full of sand, in stripes of 4 fruits 10 grains wide,
+// so no fruit's sand reaches from wall to wall and nothing clears by itself.
+function tutFill() {
+  for (let y = H >> 1; y < H; y++) for (let x = 0; x < W; x++)
+    if (!grid[y * W + x]) grid[y * W + x] = (1 + Math.floor(x / 10) % 4) * 4 + ((x * 7 + y * 3) % 5 === 0 ? 2 : 1);
 }
 // Each frame: the player moved the fruit far enough; or a fruit landed and no clear came of it.
 function tutTick() {
@@ -265,8 +273,8 @@ function endTutorial() {
 
 function newGame(tutorial = false) {
   grid = new Uint8Array(W * H); score = 0; lines = 0; flash = null; combo = makeCombo(COMBO_TIME);
-  sandAcc = 0; fire = []; helps = fullHelps(); carry = null; carryEl.hidden = true; $('rescue').hidden = true; playT = 0;
-  usedHelp = false; gameFruits = new Set(); adUsed = false;
+  sandAcc = 0; fire = []; helps = fullHelps(); carry = null; keepPiece = false; carryEl.hidden = true; $('rescue').hidden = true; playT = 0;
+  usedHelp = false; gameFruits = new Set();
   if (!tutorial) countGame();
   if (mode === 'clear') stoneFloor(grid, STONE_ROWS[diff]);
   next = rndFruit(); spawn(); state = 'play'; $('overlay').hidden = true; hud();
@@ -317,24 +325,41 @@ const aboveLine = () => grid.subarray(0, HOLD_ROWS * W).some(v => v);
 // Sand is over the line: offer the helps if any are left, else it's over.
 function lose() {
   if (tut) return toMenu(); // the tutorial's well never fills, but just in case
-  if (!Object.values(helps).some(n => n > 0) && !(adReady() && !adUsed)) return gameOver('lost'); // none left: an ad can still give one
+  keepPiece = false; // this fruit has landed: a fresh one comes after the rescue
+  if (!Object.values(helps).some(n => n > 0) && !adReady()) return gameOver('lost'); // none left: an ad can still give one
   state = 'rescue'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false;
   $('rescue').hidden = false; hud();
   sfx.warn();
 }
 
-function pick(e) { // pointerdown on a help in the "you lost" prompt; they're only offered there
+function pick(e) { // a tap on a help in the "you lost" prompt: the next tap on the sand uses it
   const tool = e.currentTarget.dataset.tool;
-  if (!helps[tool] || state !== 'rescue') return;
+  if (state !== 'rescue') return;
+  if (!helps[tool]) return adHelp(tool);
   if (tool === 'quake') return startQuake(); // no target: just shake
-  carry = { tool, at: null, armed: false };
-  drawIcon(carryEl, tool);
   $('rescue').hidden = true;
-  moveCarry(e);
+  arm(tool, false);
+}
+// A help waits for a tap on the sand (pointerdown aims, pointerup uses it); off the well it goes back.
+function arm(tool, mid) {
+  carry = { tool, at: null, mid };
+  drawIcon(carryEl, tool);
+  toast(t('aimHint'), false);
+}
+
+// From the 💪 window during play: the game waits ('aim') until a tap on the sand uses it; the quake goes at once.
+function useMidGame(tool) {
+  closeSettings();
+  if (state !== 'play' || !helps[tool]) return;
+  keepPiece = true;
+  if (tool === 'quake') return startQuake();
+  state = 'aim'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false;
+  arm(tool, true);
 }
 
 // The free helps go first; once the count left is below the gifted extras, those are being used up.
 function spend(tool) {
+  if (tut) { if (tut.step === 'power') tutStep('lose'); return; } // the tutorial's are free: nothing is used up or counted
   helps[tool]--;
   if (extras[tool] > helps[tool]) { extras[tool] = helps[tool]; saveExtras(); }
   usedHelp = true; stats.used[tool]++; saveStats();
@@ -371,9 +396,9 @@ function moveCarry(e) {
 }
 
 function dropCarry() {
-  const { tool, at } = carry;
+  const { tool, at, mid } = carry;
   carry = null; carryEl.hidden = true;
-  if (!at) { $('rescue').hidden = false; return; } // dropped off the well: nothing used, ask again
+  if (!at) { if (mid) { state = 'play'; keepPiece = false; } else $('rescue').hidden = false; return; } // off the well: nothing used
   spend(tool);
   const [x, y] = at;
   if (tool === 'choc') {
@@ -403,7 +428,7 @@ function settle(dt) {
   for (let k = 0; k < 3; k++) moved += step(grid);
   if (moved) return;
   if (aboveLine()) return lose();
-  state = 'play'; spawn(); hud();
+  state = 'play'; if (!keepPiece) spawn(); keepPiece = false; hud();
 }
 
 // reason: 'lost' (sand over the line, no helps left), 'time' (3 MIN ran out) or 'cleared' (Clear 40 done).
@@ -520,12 +545,18 @@ function toast(text, fanfare = true) {
   if (fanfare) sfx.prize();
 }
 
-// Optional rewarded ads (ads.js): in the "you lost" window once a game for a power-up, and in the menu for a
-// rainbow fruit up to RAINBOW_ADS times a day. The game's sound is held while the ad plays.
+// Optional rewarded ads (ads.js): an AD badge on a power-up that has run out (the "you lost" window and the
+// power-ups window) gives one of it; and with no rainbow
+// fruit left, the badge on it before a game gives one, up to RAINBOW_ADS times a day. Sound is held while it plays.
 function rainbowAdsLeft() {
   let a = null;
   try { a = JSON.parse(localStorage.getItem('adDay')); } catch {}
   return a?.day === dayNumber(new Date()) ? Math.max(0, RAINBOW_ADS - count(a.n)) : RAINBOW_ADS;
+}
+const rainbowAd = () => adReady() && rainbowAdsLeft() > 0;
+async function adHelp(tool) {
+  if (await watchAd()) toast(t('tAd', t(giveHelp(tool))));
+  hud();
 }
 async function watchAd() {
   hush(true);
@@ -548,7 +579,7 @@ function dailyGift() {
 // A free random help (daily gift, achievement), kept until used; mid-game it is usable at once. Returns which.
 function giveHelp(t = Object.keys(HELPS)[Math.floor(Math.random() * Object.keys(HELPS).length)]) {
   extras[t]++; saveExtras();
-  if (PLAYING.includes(state)) helps[t]++; else helps = fullHelps(); // mid-game: keep what this game has used
+  if (inGame()) helps[t]++; else helps = fullHelps(); // mid-game (or paused): keep what this game has used
   hud();
   return t;
 }
@@ -596,7 +627,7 @@ function tick(dt) {
   if (dir) slideTo(clampX(piece.x + 2 * dir, piece.s)); // 2 grains per frame, as in the original
   if (tut) tutTick();
   if (!piece.falling) {
-    if (tut?.step === 'move' || tut?.step === 'rotate') return; // the fruit waits until the player has tried
+    if (tut?.step === 'move' || tut?.step === 'rotate' || tut?.step === 'power') return; // the fruit waits until the player has tried
     holdLeft -= dt;
     if (holdLeft <= 0 || fast) piece.falling = true;
   } else {
@@ -635,7 +666,7 @@ function render() {
     const c = blink && flashMask[i] ? WHITE : v ? PALETTE[v] : y === HOLD_ROWS && x % 4 < 2 ? LINE : BG;
     buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = 255;
   }
-  if (piece && state === 'play') {
+  if (piece && (state === 'play' || state === 'aim' || keepPiece)) {
     if (!piece.falling) {
       const f = holdLeft / holdTime, bar = [255, 255 * f, 255 * f];
       for (let x = 0; x < PW * f; x++) { put(x, 0, bar); put(x, 1, bar); }
@@ -747,28 +778,32 @@ function hud() {
   for (const b of document.querySelectorAll('#diff button')) b.classList.toggle('on', b.dataset.d === diff);
   for (const b of document.querySelectorAll('#modes button')) b.classList.toggle('on', b.dataset.m === mode);
   for (const n of document.querySelectorAll('[data-n]')) n.textContent = helps[n.dataset.n];
-  for (const b of document.querySelectorAll('.help-src')) b.disabled = !helps[b.dataset.tool];
+  for (const b of document.querySelectorAll('.help-src')) {
+    const empty = !helps[b.dataset.tool];
+    b.classList.toggle('adable', empty && adReady());
+    b.disabled = empty && !adReady();
+  }
   $('rbN').textContent = rainbows;
+  $('rbGet').classList.toggle('adable', !rainbows && rainbowAd()); $('rbYes').disabled = !rainbows;
   $('exit').hidden = state === 'menu' || state === 'over' || state === 'ask';
-  $('adHelp').hidden = !(state === 'rescue' && adReady() && !adUsed);
-  $('adRainbow').hidden = !((state === 'menu' || state === 'over') && adReady() && rainbowAdsLeft() > 0);
+  $('pow').hidden = inGame(); $('powSm').hidden = !inGame(); // in a game the small one sits by the power-up counts
 }
 
-// Difficulty chosen: if you own a rainbow, ask whether to spend one on this game, then play.
 // Leaving a game: the ✕ button, Esc and Android's back button all ask first; back on the menu closes the app.
 function askQuit() {
-  if (carry) { carry.at = null; return dropCarry(); } // while dragging a help, back just puts it back
+  if (carry) { carry.at = null; return dropCarry(); } // while a help waits for a tap, back just puts it back
   if (!PLAYING.includes(state)) return;
   pause(); $('quit').hidden = false;
 }
 
-const PLAYING = ['play', 'rescue', 'settle', 'quake'];
+const PLAYING = ['play', 'rescue', 'settle', 'quake', 'aim'];
+const inGame = () => PLAYING.includes(state === 'paused' ? pausedFrom : state);
 function pause() { pausedFrom = state; state = 'paused'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false; }
 function resume() { state = pausedFrom; $('quit').hidden = $('settings').hidden = true; document.activeElement?.blur(); }
 
 // The ⚙ / 🏆 window: switches, how to play, achievements, credits. Opened mid-game (or when the app
 // goes to the background) it is the pause menu until closed. `home`: the view it opened on, where BACK closes it.
-const VIEWS = ['setMain', 'welcome', 'howto', 'trophies', 'credits'];
+const VIEWS = ['setMain', 'welcome', 'howto', 'trophies', 'credits', 'powers'];
 let view = 'setMain', home = 'setMain', resetAt = -1e9;
 // `atStart`: the short How to play at start-up, with DON'T SHOW THIS AGAIN instead of BACK.
 function openSettings(v = 'setMain', atStart = false) {
@@ -872,17 +907,17 @@ function toMenu() {
   dailyGift(); checkBoards(); remind(false);
 }
 
-function start(d) {
+// START: if you own a rainbow (or an ad can give one), ask whether to spend one on this game, then play.
+function start() {
   if (state === 'over' && performance.now() - overAt < 600) return; // the move that lost shouldn't restart
   document.activeElement?.blur(); // else Space during play would "click" the focused button and restart
-  diff = d; saveDiff();
-  if (!rainbows) return begin(false);
+  if (!rainbows && !rainbowAd()) return begin(false);
   state = 'ask'; hud(); $('prestart').hidden = false;
 }
 
 function begin(useRainbow) {
-  if (useRainbow && rainbows > 0) { rainbows--; saveRainbows(); }
-  rainbowOn = useRainbow; $('prestart').hidden = true; document.activeElement?.blur();
+  rainbowOn = useRainbow && rainbows > 0;
+  if (rainbowOn) { rainbows--; saveRainbows(); } $('prestart').hidden = true; document.activeElement?.blur();
   newGame();
   sfx.start(); music.start();
 }
@@ -933,31 +968,32 @@ function fit() {
   cv.style.width = PW * scale + 'px'; cv.style.height = PH * scale + 'px';
 }
 
-for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => start(b.dataset.d));
+for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { diff = b.dataset.d; saveDiff(); hud(); b.blur(); });
+$('go').addEventListener('click', () => { if (state === 'menu' || state === 'over') start(); });
 $('mmusic').addEventListener('click', () => mute('music'));
 $('msfx').addEventListener('click', () => mute('sfx'));
 $('mvibe').addEventListener('click', () => mute('vibe'));
 $('gear').addEventListener('click', () => openSettings());
 $('trophy').addEventListener('click', () => openSettings('trophies'));
+$('pow').addEventListener('click', () => openSettings('powers'));
+$('powSm').addEventListener('click', () => openSettings('powers'));
 $('setX').addEventListener('click', closeSettings);
 $('setGo').addEventListener('click', closeSettings);
 $('reset').addEventListener('click', resetScores);
 $('tutBtn').addEventListener('click', () => { if (state === 'menu' || state === 'over') startTutorial(); });
-$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('lose'); else if (tut.step === 'lose') tutStep('done'); else toMenu(); });
+$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('power'); else if (tut.step === 'lose') tutStep('done'); else toMenu(); });
 $('tutSkip').addEventListener('click', () => { if (tut) toMenu(); });
 $('noShow').addEventListener('click', () => { try { localStorage.setItem('noHowto', '1'); } catch {} closeSettings(); });
 for (const b of document.querySelectorAll('#settings [data-view]')) b.addEventListener('click', () => show(b.dataset.view));
 for (const b of document.querySelectorAll('#settings .back')) b.addEventListener('click', back);
 // leaving the app mid-game (a call, the home button) pauses it
 document.addEventListener('visibilitychange', () => { if (document.hidden && PLAYING.includes(state) && !adShowing()) openSettings(); });
-$('adHelp').addEventListener('click', async () => {
-  if (state !== 'rescue' || adUsed) return;
-  adUsed = true;
-  if (await watchAd()) toast(t('tAd', t(giveHelp()))); else adUsed = false; // closed early: may try again
-  hud();
+for (const b of document.querySelectorAll('#powList .help-src')) b.addEventListener('click', () => {
+  if (!helps[b.dataset.tool]) adHelp(b.dataset.tool);
+  else if (state === 'paused' && pausedFrom === 'play') useMidGame(b.dataset.tool);
 });
-$('adRainbow').addEventListener('click', async () => {
-  if ((state !== 'menu' && state !== 'over') || !rainbowAdsLeft()) return;
+$('rbGet').addEventListener('click', async () => {
+  if (state !== 'ask' || rainbows || !rainbowAd()) return;
   if (await watchAd()) {
     try { localStorage.setItem('adDay', JSON.stringify({ day: dayNumber(new Date()), n: RAINBOW_ADS - rainbowAdsLeft() + 1 })); } catch {}
     rainbows++; saveRainbows(); toast(t('tAd', t('rainbowFruit')));
@@ -966,7 +1002,7 @@ $('adRainbow').addEventListener('click', async () => {
 });
 $('adPrivacy').addEventListener('click', adPrivacyOptions);
 $('giveup').addEventListener('click', () => { if (state === 'rescue') gameOver('lost'); });
-for (const b of document.querySelectorAll('.help-src')) b.addEventListener('pointerdown', pick);
+for (const b of document.querySelectorAll('#helps .help-src')) b.addEventListener('click', pick);
 for (const c of document.querySelectorAll('canvas[data-icon]')) drawIcon(c, c.dataset.icon);
 paintSprite($('rbIcon'), RAINBOW.sprite);
 $('rbYes').addEventListener('click', () => { if (state === 'ask') begin(true); });
@@ -986,8 +1022,8 @@ for (const b of document.querySelectorAll('#modes button')) b.addEventListener('
   mode = b.dataset.m; saveMode(); drawBoard(); hud(); b.blur();
 });
 
-// Helps (only after losing): press one, drag, and it acts where you let go. A plain tap on it
-// arms it instead, and the next tap on the well uses it there. The earthquake just needs a tap.
+// Helps: tap one (in the "you lost" prompt or the 💪 window), then tap the sand: it acts where the finger
+// lifts, and sliding before lifting moves the aim. The earthquake just needs the first tap.
 addEventListener('pointerdown', e => {
   if (carry) { moveCarry(e); return; }
   if (state !== 'play' || e.target.closest('button')) return; // buttons aren't game input
@@ -1002,10 +1038,7 @@ addEventListener('pointermove', e => {
   if (g0.axis === 'y' && dy > 40) touchFast = true; // stays on until the finger lifts
 });
 addEventListener('pointerup', e => {
-  if (carry) {
-    if (!carry.at && !carry.armed && e.target.closest('.help-src')) { carry.armed = true; carryEl.hidden = true; return; }
-    return dropCarry();
-  }
+  if (carry) { moveCarry(e); return dropCarry(); } // used where the finger lifts
   if (g0 && !g0.axis && e.timeStamp - g0.t < 300) rotate();
   g0 = null; touchFast = false;
 });
@@ -1019,7 +1052,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyN' && !e.repeat) return mute('sfx');
   if (!$('settings').hidden) { if (e.code === 'Escape') back(); return; } // no game keys behind it
   if (e.code === 'Escape' && state !== 'ask') return state === 'paused' ? resume() : askQuit(); // Esc = the ✕ button
-  if (state === 'menu' || state === 'over') { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); start(diff); } return; }
+  if (state === 'menu' || state === 'over') { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); start(); } return; }
   if (state === 'ask') { if (e.code === 'Enter') begin(true); else if (e.code === 'Escape') begin(false); return; }
   if (state !== 'play') return;
   const k = KEY[e.code];

@@ -50,6 +50,15 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px;
     cursor: grab; touch-action: none; }
   .help-src:disabled { opacity: 0.35; cursor: default; }
+  .help-src, #prestart #rbGet { position: relative; }
+  /* AD badge: on an empty power-up (or no rainbow fruit) when a rewarded ad is ready; tapping it plays the ad */
+  .ad { display: none; position: absolute; top: 2px; right: 2px; padding: 1px 4px; font-size: 10px; font-style: normal;
+    color: #0d0b14; background: #72b754; }
+  .adable .ad { display: block; }
+  #powList { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #settings #powList .help-src { font-size: 12px; color: #f4e9c8; background: #2a1a14; border-color: #8a5a30; min-height: 64px; cursor: default; }
+  #settings #powList .help-src.adable { cursor: pointer; }
+  #powSm { font-size: 10px; padding: 0 3px; min-height: 18px; margin-left: 2px; }
   .help-src canvas { width: 39px; height: 42px; }
   #carry { position: fixed; width: 52px; height: 56px; transform: translate(-50%, -100%); pointer-events: none; z-index: 3; }
   #carry[hidden], #rescue[hidden] { display: none; }
@@ -58,16 +67,16 @@
     background: #1d1a28f2; border: 2px solid #ce5239; }
   #rescue p { margin: 0 0 10px; }
   #helps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .adbtn { font: inherit; min-height: 48px; width: 100%; margin-bottom: 10px; cursor: pointer;
-    color: #0d0b14; background: #72b754; border: 2px solid #72b754; } /* optional rewarded ad */
-  #overlay .adbtn { width: auto; min-height: 40px; margin: 0; padding: 0 14px; font-size: 13px; }
   #giveup { font: inherit; color: #8a80a8; background: none; border: 2px solid #3a3350; min-height: 44px; width: 100%; cursor: pointer; }
   #prestart, #quit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
     width: min(320px, 92vw); box-sizing: border-box; padding: 14px; text-align: center;
     background: #1d1a28f7; border: 2px solid #fcbc3c; }
   #prestart[hidden], #quit[hidden] { display: none; }
   #prestart p, #quit p { margin: 0 0 12px; }
-  #rbIcon { width: 42px; height: 42px; margin: 0 auto 8px; }
+  #rbIcon { width: 42px; height: 42px; }
+  #prestart #rbGet { display: block; flex: none; min-height: 0; margin: 0 auto 8px; padding: 4px; background: none; border: none; cursor: default; }
+  #prestart #rbGet.adable { cursor: pointer; }
+  #prestart button:disabled { opacity: 0.35; cursor: default; }
   #prestart div, #quit div { display: flex; gap: 10px; }
   #prestart button, #quit button { flex: 1; font: inherit; min-height: 48px; cursor: pointer; background: #1d1a28; color: #8a80a8; border: 2px solid #3a3350; }
   #prestart #rbYes, #quit #qGo { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
@@ -132,11 +141,12 @@
     padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) 0 var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
     object-fit: contain; object-position: 50% 100%; transition: opacity 0.6s; cursor: pointer; }
   #intro.out { opacity: 0; pointer-events: none; }
-  #tap { color: #ff6a6a; margin: 4px 0 0; }
   #diff { display: flex; gap: 10px; margin-top: 12px; }
   #diff button { font: inherit; font-size: 16px; min-width: 88px; min-height: 48px; color: var(--c);
     background: #1d1a28; border: 2px solid var(--c); cursor: pointer; opacity: 0.8; }
   #diff button.on { background: var(--c); color: #0d0b14; opacity: 1; }
+  #go { font: inherit; font-size: 18px; min-width: 160px; min-height: 52px; margin-top: 12px; cursor: pointer;
+    color: #0d0b14; background: #fcbc3c; border: 2px solid #fcbc3c; }
   [data-d="lo"] { --c: #72b754; }
   [data-d="med"] { --c: #fcbc3c; }
   [data-d="hi"] { --c: #ce5239; }
@@ -151,22 +161,21 @@
     <div><small data-t="score">SCORE</small><br><span id="score">0</span><br><small id="info">LV 1 · 0 lines</small>
       <br><span class="helps-hud" title="power-ups left">
         <canvas data-icon="choc"></canvas><b data-n="choc">3</b><canvas data-icon="knife"></canvas><b data-n="knife">3</b>
-        <canvas data-icon="blend"></canvas><b data-n="blend">3</b><canvas data-icon="quake"></canvas><b data-n="quake">3</b>
+        <canvas data-icon="blend"></canvas><b data-n="blend">3</b><canvas data-icon="quake"></canvas><b data-n="quake">3</b><button class="mute" id="powSm" aria-label="power-ups" hidden>💪</button>
       </span></div>
     <div id="mid"><canvas id="next" width="36" height="36"></canvas><span id="mult"></span></div>
-    <div><small data-t="best">BEST</small><br><span id="best">0</span><br><button class="mute" id="trophy" aria-label="achievements">🏆</button> <button class="mute" id="gear" aria-label="settings">⚙</button> <button class="mute" id="exit" aria-label="leave game" hidden>✕</button></div>
+    <div><small data-t="best">BEST</small><br><span id="best">0</span><br><button class="mute" id="pow" aria-label="power-ups">💪</button> <button class="mute" id="trophy" aria-label="achievements">🏆</button> <button class="mute" id="gear" aria-label="settings">⚙</button> <button class="mute" id="exit" aria-label="leave game" hidden>✕</button></div>
   </div>
   <canvas id="well"></canvas>
   <div id="pad" data-t="drag">◀ drag ▶</div>
   <div id="rescue" hidden>
     <p data-t="lost">YOU LOST!<br>Drag a power-up onto the sand.<br>(For the quake, just tap it.)</p>
     <div id="helps">
-      <button class="help-src" data-tool="choc"><canvas data-icon="choc"></canvas><span><span data-t="choc">CHOCOLATE BOMB</span> ×<b data-n="choc">3</b></span></button>
-      <button class="help-src" data-tool="knife"><canvas data-icon="knife"></canvas><span><span data-t="knife">KNIFE</span> ×<b data-n="knife">3</b></span></button>
-      <button class="help-src" data-tool="blend"><canvas data-icon="blend"></canvas><span><span data-t="blend">BLENDER</span> ×<b data-n="blend">3</b></span></button>
-      <button class="help-src" data-tool="quake"><canvas data-icon="quake"></canvas><span><span data-t="quake">QUAKE</span> ×<b data-n="quake">3</b></span></button>
+      <button class="help-src" data-tool="choc"><i class="ad">AD</i><canvas data-icon="choc"></canvas><span><span data-t="choc">CHOCOLATE BOMB</span> ×<b data-n="choc">3</b></span></button>
+      <button class="help-src" data-tool="knife"><i class="ad">AD</i><canvas data-icon="knife"></canvas><span><span data-t="knife">KNIFE</span> ×<b data-n="knife">3</b></span></button>
+      <button class="help-src" data-tool="blend"><i class="ad">AD</i><canvas data-icon="blend"></canvas><span><span data-t="blend">BLENDER</span> ×<b data-n="blend">3</b></span></button>
+      <button class="help-src" data-tool="quake"><i class="ad">AD</i><canvas data-icon="quake"></canvas><span><span data-t="quake">QUAKE</span> ×<b data-n="quake">3</b></span></button>
     </div>
-    <button id="adHelp" class="adbtn" hidden data-t="adHelp"></button>
     <button id="giveup" data-t="giveUp">GIVE UP</button>
   </div>
   <canvas id="carry" hidden></canvas>
@@ -177,14 +186,13 @@
     <div id="modes"><button data-m="endless" data-t="endless">ENDLESS</button><button data-m="time" data-t="time">3 MIN</button><button data-m="clear" data-t="clear">CLEAR 40</button></div>
     <p class="lbl" data-t="difficulty">DIFFICULTY</p>
     <div id="diff"><button data-d="lo" data-t="lo">EASY</button><button data-d="med" data-t="med">NORMAL</button><button data-d="hi" data-t="hi">HARD</button></div>
-    <p id="tap" data-t="choose">CHOOSE A DIFFICULTY TO PLAY</p>
-    <button id="adRainbow" class="adbtn" hidden data-t="adRainbow"></button>
+    <button id="go" data-t="start">▶ START</button>
     <p id="boardTitle"></p>
     <div id="board"></div>
   </div>
   <div id="prestart" hidden>
     <button id="rbX" aria-label="back to menu">✕</button>
-    <canvas id="rbIcon"></canvas>
+    <button id="rbGet" aria-label="rainbow fruit"><i class="ad">AD</i><canvas id="rbIcon"></canvas></button>
     <p><span data-t="rbAsk">Use a RAINBOW FRUIT for this game?</span><br><small data-t="rbInfo">Its sand matches any colour. 5% of the fruits in this game will be rainbow fruits.</small><br><span data-t="rbHave">You have</span> <b id="rbN">3</b>.</p>
     <div><button id="rbNo" data-t="no">NO</button><button id="rbYes" data-t="yesUse">YES, USE ONE</button></div>
   </div>
@@ -237,6 +245,16 @@
       <p class="txt" data-t="achInfo"></p>
       <div id="trophyList"></div>
       <p class="txt" id="rbNext"></p>
+      <button class="back" data-t="back">BACK</button>
+    </div>
+    <div id="powers" hidden>
+      <p data-t="powers">POWER-UPS</p>
+      <div id="powList">
+        <button class="help-src" data-tool="choc"><i class="ad">AD</i><canvas data-icon="choc"></canvas><span><span data-t="choc">CHOCOLATE BOMB</span> ×<b data-n="choc">3</b></span></button>
+        <button class="help-src" data-tool="knife"><i class="ad">AD</i><canvas data-icon="knife"></canvas><span><span data-t="knife">KNIFE</span> ×<b data-n="knife">3</b></span></button>
+        <button class="help-src" data-tool="blend"><i class="ad">AD</i><canvas data-icon="blend"></canvas><span><span data-t="blend">BLENDER</span> ×<b data-n="blend">3</b></span></button>
+        <button class="help-src" data-tool="quake"><i class="ad">AD</i><canvas data-icon="quake"></canvas><span><span data-t="quake">QUAKE</span> ×<b data-n="quake">3</b></span></button>
+      </div>
       <button class="back" data-t="back">BACK</button>
     </div>
     <div id="credits" hidden>
