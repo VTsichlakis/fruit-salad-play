@@ -210,6 +210,7 @@ const bestOf = (m, d) => boards[m][d].length ? fmt(m, Number(boards[m][d][0])) :
 
 // A random fruit, already turned the way it will fall (0-3 quarter turns), so the preview shows it as it comes.
 function rndFruit() {
+  if (tut && tut.step !== 'done') return FRUITS[0].sprite; // the tutorial's bananas, lying flat
   let s = rainbowOn && Math.random() < RAINBOW_CHANCE ? RAINBOW.sprite : FRUITS[Math.floor(Math.random() * FRUITS.length)].sprite;
   for (let r = Math.floor(Math.random() * 4); r > 0; r--) s = rot(s);
   return s;
@@ -219,10 +220,60 @@ const level = () => mode === 'endless' ? Math.min(MAX_LEVEL, Math.floor(lines / 
 const speed = () => DIFF[diff] * (1 + 0.1 * level());
 const fireLevel = () => combo.mult >= 7 ? 3 : combo.mult >= 5 ? 2 : combo.mult >= 3 ? 1 : 0;
 
-function newGame() {
+
+// --- Tutorial: the first time the app opens (and from How to play), a short guided game on Easy. A floor of banana
+// sand with a gap waits at the bottom, the fruits are bananas, and each step waits for the player to do what it says.
+// Nothing in it counts: no stats, scores or achievements.
+const TUT_GAP = [38, 62]; // columns of the gap in the tutorial floor
+const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', lose: 'tutLose', done: 'tutDone' };
+const ARROW = ['..###..', '..###..', '..###..', '#######', '.#####.', '..###..', '...#...'];
+let tut = null; // while it runs: { step, x0, landed, freeze, saved: { mode, diff } }
+const tutSeen = () => { try { return localStorage.getItem('tutDone') === '1'; } catch { return false; } };
+function startTutorial() {
+  $('settings').hidden = true; $('overlay').hidden = true;
+  tut = { step: 'move', saved: { mode, diff } };
+  mode = 'endless'; diff = 'lo'; rainbowOn = false;
+  newGame(true);
+  for (let y = H - 4; y < H; y++) for (let x = 0; x < W; x++)
+    if (x < TUT_GAP[0] || x >= TUT_GAP[1]) grid[y * W + x] = 4 + 1 + ((x * 7 + y * 3) % 5 === 0); // banana sand, a few light grains
+  tut.x0 = piece.x;
+  sfx.start(); music.start();
+  tutShow();
+}
+function tutStep(step) {
+  tut.step = step; tut.freeze = step === 'cleared' || step === 'lose' || step === 'done'; // reading time: the game waits
+  if (step === 'cleared') sfx.prize();
+  tutShow();
+}
+function tutShow(key = TUT_TEXT[tut.step]) {
+  $('tutText').textContent = t(key);
+  $('tutNext').hidden = !tut.freeze; $('tutNext').textContent = t(tut.step === 'done' ? 'tutPlay' : 'tutNext');
+  $('tutSkip').hidden = tut.step === 'done';
+  $('tut').style.top = `${cv.getBoundingClientRect().top + (HOLD_ROWS + 6) * scale}px`; // just under the waiting fruit
+  $('tut').hidden = false;
+}
+// Each frame: the player moved the fruit far enough; or a fruit landed and no clear came of it.
+function tutTick() {
+  if (tut.step === 'move' && Math.abs(piece.x - tut.x0) >= 10) tutStep('rotate');
+  if (tut.step === 'drop' && tut.landed && playT - tut.landed > 3 && !flash) { tut.landed = 0; tutShow('tutAgain'); }
+}
+function endTutorial() {
+  if (!tut) return;
+  ({ mode, diff } = tut.saved); tut = null; $('tut').hidden = true;
+  try { localStorage.setItem('tutDone', '1'); } catch {}
+}
+
+function newGame(tutorial = false) {
   grid = new Uint8Array(W * H); score = 0; lines = 0; flash = null; combo = makeCombo(COMBO_TIME);
   sandAcc = 0; fire = []; helps = fullHelps(); carry = null; carryEl.hidden = true; $('rescue').hidden = true; playT = 0;
   usedHelp = false; gameFruits = new Set(); adUsed = false;
+  if (!tutorial) countGame();
+  if (mode === 'clear') stoneFloor(grid, STONE_ROWS[diff]);
+  next = rndFruit(); spawn(); state = 'play'; $('overlay').hidden = true; hud();
+}
+
+// A game started: games played, days in a row, and the chests that come with them.
+function countGame() {
   const today = dayNumber(new Date());
   const was = stats.streak;
   stats.streak = nextStreak(stats.streak, stats.day, today); stats.day = today; stats.games++; saveStats();
@@ -233,8 +284,6 @@ function newGame() {
     toast(t('tAchChest', t('gamesName', k * 100), giveChest(k)));
   }
   remind(false);
-  if (mode === 'clear') stoneFloor(grid, STONE_ROWS[diff]);
-  next = rndFruit(); spawn(); state = 'play'; $('overlay').hidden = true; hud();
 }
 
 function spawn() {
@@ -251,6 +300,7 @@ function rotate() {
   if (collides(grid, s, x, piece.y)) return; // only matters while falling next to sand
   piece.x = x; piece.s = s;
   sfx.rotate();
+  if (tut?.step === 'rotate') tutStep('drop');
 }
 
 // Step sideways towards tx, stopping at sand (matters once the fruit is falling between piles).
@@ -266,6 +316,7 @@ const aboveLine = () => grid.subarray(0, HOLD_ROWS * W).some(v => v);
 
 // Sand is over the line: offer the helps if any are left, else it's over.
 function lose() {
+  if (tut) return toMenu(); // the tutorial's well never fills, but just in case
   if (!Object.values(helps).some(n => n > 0) && !(adReady() && !adUsed)) return gameOver('lost'); // none left: an ad can still give one
   state = 'rescue'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false;
   $('rescue').hidden = false; hud();
@@ -530,7 +581,8 @@ function tick(dt) {
     const cls = grid[flash[0]] >> 2, fruits = fruitsIn(grid, flash), withRainbow = flash.some(p => grid[p] >> 2 === JOKER);
     for (const p of flash) grid[p] = 0;
     const pts = combo.clear(flash.length);
-    score += pts; lines++; popScore(flash, pts, cls); countLine(fruits, withRainbow, flash.bridge); flash = null; hud(); bump();
+    score += pts; lines++; popScore(flash, pts, cls); if (!tut) countLine(fruits, withRainbow, flash.bridge); flash = null; hud(); bump();
+    if (tut?.step === 'drop') tutStep('cleared');
     sfx.clear(combo.mult);
     if (mode === 'clear' && lines >= CLEAR_LINES) return gameOver('cleared');
   }
@@ -542,7 +594,9 @@ function tick(dt) {
   }
   const dir = keys.right - keys.left, fast = keys.down || touchFast;
   if (dir) slideTo(clampX(piece.x + 2 * dir, piece.s)); // 2 grains per frame, as in the original
+  if (tut) tutTick();
   if (!piece.falling) {
+    if (tut?.step === 'move' || tut?.step === 'rotate') return; // the fruit waits until the player has tried
     holdLeft -= dt;
     if (holdLeft <= 0 || fast) piece.falling = true;
   } else {
@@ -552,6 +606,7 @@ function tick(dt) {
       fallAcc--;
       if (collides(grid, piece.s, piece.x, piece.y + 1)) {
         stamp(grid, piece.s, piece.x, piece.y); hud();
+        if (tut) tut.landed = playT;
         sfx.land(); shake = 3; // 3px jolt on landing, gone in 3 frames, as in the original
         if (aboveLine()) { lose(); break; } // sand only gets over the line when a fruit lands there: lost at once
         spawn(); break;
@@ -597,6 +652,10 @@ function render() {
       if (x >= 0 && x < PW && y >= 0 && y < PH) put(x, y, c, Math.min(1, a * 2));
     }
   }
+  const tick2 = (performance.now() / 300 | 0) & 1; // tutorial blink, also while its game waits
+  if (tut?.step === 'drop' && tick2) // an arrow over the gap in the floor
+    ARROW.forEach((r, y) => [...r].forEach((ch, x) => ch === '#' && put(((TUT_GAP[0] + TUT_GAP[1]) >> 1) - 3 + x, H - 16 + y, WHITE)));
+  if (tut?.step === 'lose' && tick2) for (let x = 0; x < PW; x++) put(x, HOLD_ROWS, [255, 60, 60]);
   if (carry?.at) { // what the dragged help would hit: dashed circle, or the knife's band
     const [cx, cy] = carry.at, R = carry.tool === 'choc' ? BLAST_R : BLEND_R;
     if (carry.tool === 'knife') {
@@ -709,9 +768,9 @@ function resume() { state = pausedFrom; $('quit').hidden = $('settings').hidden 
 
 // The ⚙ / 🏆 window: switches, how to play, achievements, credits. Opened mid-game (or when the app
 // goes to the background) it is the pause menu until closed. `home`: the view it opened on, where BACK closes it.
-const VIEWS = ['setMain', 'howto', 'trophies', 'credits'];
+const VIEWS = ['setMain', 'welcome', 'howto', 'trophies', 'credits'];
 let view = 'setMain', home = 'setMain', resetAt = -1e9;
-// `atStart`: How to play shown at start-up, with GOT IT / DON'T SHOW THIS AGAIN instead of BACK.
+// `atStart`: the short How to play at start-up, with DON'T SHOW THIS AGAIN instead of BACK.
 function openSettings(v = 'setMain', atStart = false) {
   if (carry || state === 'paused') return; // not over a dragged help or the "leave this game?" question
   const paused = PLAYING.includes(state);
@@ -719,12 +778,13 @@ function openSettings(v = 'setMain', atStart = false) {
   $('setTitle').textContent = t(paused ? 'paused' : 'settings'); $('setGo').hidden = !paused;
   $('resetTxt').textContent = t('reset'); resetAt = -1e9;
   $('adPrivacy').hidden = !needsAdPrivacy();
-  $('gotIt').hidden = $('noShow').hidden = !atStart; $('howto').querySelector('.back').hidden = atStart;
+  $('noShow').hidden = !atStart; $('welcome').querySelector('.back').hidden = atStart; // at start-up the ✕ closes it
+  $('tutBtn').hidden = paused; // only from the menu: it starts a game
   home = v; show(v); $('settings').hidden = false;
 }
 function welcome() {
   try { if (localStorage.getItem('noHowto') === '1') return; } catch {}
-  openSettings('howto', true);
+  openSettings('welcome', true);
 }
 function closeSettings() {
   if (state === 'paused') return resume();
@@ -804,6 +864,7 @@ function resetScores() {
 }
 
 function toMenu() {
+  endTutorial();
   for (const id of ['quit', 'rescue', 'prestart']) $(id).hidden = true;
   state = 'menu'; music.start('menu'); document.activeElement?.blur();
   $('title').textContent = MENU_TITLE; $('msg').innerHTML = t('menuMsg');
@@ -844,6 +905,7 @@ function applyLang() {
   if (state === 'menu') $('msg').innerHTML = t('menuMsg');
   $('setTitle').textContent = t(state === 'paused' && pausedFrom ? 'paused' : 'settings'); $('resetTxt').textContent = t('reset');
   if (!$('trophies').hidden) drawTrophies();
+  if (tut) tutShow();
 }
 function chooseLang(code) {
   setLang(code);
@@ -880,7 +942,9 @@ $('trophy').addEventListener('click', () => openSettings('trophies'));
 $('setX').addEventListener('click', closeSettings);
 $('setGo').addEventListener('click', closeSettings);
 $('reset').addEventListener('click', resetScores);
-$('gotIt').addEventListener('click', closeSettings);
+$('tutBtn').addEventListener('click', () => { if (state === 'menu' || state === 'over') startTutorial(); });
+$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('lose'); else if (tut.step === 'lose') tutStep('done'); else toMenu(); });
+$('tutSkip').addEventListener('click', () => { if (tut) toMenu(); });
 $('noShow').addEventListener('click', () => { try { localStorage.setItem('noHowto', '1'); } catch {} closeSettings(); });
 for (const b of document.querySelectorAll('#settings [data-view]')) b.addEventListener('click', () => show(b.dataset.view));
 for (const b of document.querySelectorAll('#settings .back')) b.addEventListener('click', back);
@@ -972,7 +1036,7 @@ let last = performance.now(), acc = 0;
 function loop(now) {
   acc += Math.min(0.1, (now - last) / 1000); last = now; // clamp so returning from background doesn't fast-forward
   while (acc >= 1 / 60) {
-    if (state === 'play') tick(1 / 60); else if (state === 'settle') settle(1 / 60); else if (state === 'quake') quakeTick(1 / 60);
+    if (state === 'play' && !tut?.freeze) tick(1 / 60); else if (state === 'settle') settle(1 / 60); else if (state === 'quake') quakeTick(1 / 60);
     acc -= 1 / 60;
   }
   render();
@@ -980,4 +1044,4 @@ function loop(now) {
 }
 
 applyLang(); fit(); requestAnimationFrame(loop);
-intro(() => { toMenu(); welcome(); initAds(hud); }); // the title screen covers the menu until its sand has settled
+intro(() => { toMenu(); tutSeen() ? welcome() : startTutorial(); initAds(hud); }); // the title screen covers the menu until its sand has settled

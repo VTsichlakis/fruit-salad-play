@@ -77,7 +77,7 @@
     background: #1d1a28f7; border: 2px solid #fcbc3c; }
   #settings .txt { text-align: left; font-size: 12px; font-weight: normal; line-height: 1.5; }
   #settings .txt canvas { width: 13px; height: 14px; display: inline-block; vertical-align: middle; }
-  #settings #setGo, #settings #gotIt { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
+  #settings #setGo, #settings #tutBtn { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
   #trophyList { display: flex; flex-direction: column; gap: 8px; }
   .trophy { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 8px; text-align: left; font-size: 13px; }
   .trophy canvas { width: 40px; height: 24px; object-fit: contain; }
@@ -87,6 +87,15 @@
   #trophyList .grp { margin: 8px 0 0; color: #8a80a8; font-size: 11px; letter-spacing: 2px; text-align: left; border-bottom: 1px solid #3a3350; }
   .ach { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; text-align: left; font-size: 13px; opacity: 0.5; }
   .ach.got { opacity: 1; }
+  /* tutorial: a note over the well that lets drags through; only its buttons take taps */
+  #tut { position: fixed; left: 50%; transform: translateX(-50%); z-index: 4; width: min(330px, 90vw); box-sizing: border-box;
+    padding: 10px 12px; text-align: center; background: #1d1a28e8; border: 2px solid #fcbc3c; pointer-events: none; }
+  #tut[hidden], #tut [hidden] { display: none; }
+  #tut p { margin: 0 0 8px; font-size: 14px; line-height: 1.4; }
+  #tut div { display: flex; gap: 8px; justify-content: center; }
+  #tut button { pointer-events: auto; font: inherit; font-size: 12px; min-height: 40px; padding: 0 12px; cursor: pointer;
+    background: #1d1a28; color: #8a80a8; border: 2px solid #3a3350; }
+  #tut #tutNext { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
   #toasts { position: fixed; z-index: 8; left: 50%; transform: translateX(-50%); width: min(320px, 92vw);
     top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 64px);
     display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
@@ -193,11 +202,20 @@
       <button id="mvibe"><canvas class="ico" data-icon="vibe"></canvas><span>VIBRATION: ON</span></button>
       <p class="lbl" data-t="language">LANGUAGE</p>
       <div id="langs"></div>
-      <button data-view="howto"><canvas class="ico" data-icon="joystick"></canvas><span data-t="howto">HOW TO PLAY</span></button>
+      <button data-view="welcome"><canvas class="ico" data-icon="joystick"></canvas><span data-t="howto">HOW TO PLAY</span></button>
       <button data-view="trophies"><canvas class="ico" data-icon="trophy"></canvas><span data-t="achievements">ACHIEVEMENTS</span></button>
       <button data-view="credits"><canvas class="ico" data-icon="heart"></canvas><span data-t="credits">CREDITS</span></button>
       <button id="reset"><canvas class="ico" data-icon="trash"></canvas><span id="resetTxt">RESET SCORES</span></button>
       <button id="adPrivacy" hidden><canvas class="ico" data-icon="lock"></canvas><span data-t="adPrivacy">AD PRIVACY</span></button>
+    </div>
+    <!-- How to play, short: at start-up and from Settings; the full text is one tap away -->
+    <div id="welcome" hidden>
+      <p data-t="howto">HOW TO PLAY</p>
+      <p class="txt" data-t="welcomeInfo"></p>
+      <button id="tutBtn" data-t="tutBtn">▶ TUTORIAL</button>
+      <button data-view="howto" data-t="instructions">INSTRUCTIONS</button>
+      <button id="noShow" hidden data-t="noShow">DON'T SHOW THIS AGAIN</button>
+      <button class="back" data-t="back">BACK</button>
     </div>
     <div id="howto" hidden>
       <p data-t="howto">HOW TO PLAY</p>
@@ -212,9 +230,7 @@
       <p class="txt" data-t="h5"></p>
       <p class="txt" data-t="h6"></p>
       <p class="txt"><canvas data-icon="chest"></canvas> <span data-t="h7"></span></p>
-      <button id="gotIt" hidden data-t="gotIt">GOT IT</button>
-      <button id="noShow" hidden data-t="noShow">DON'T SHOW THIS AGAIN</button>
-      <button class="back" data-t="back">BACK</button>
+      <button data-view="welcome" data-t="back">BACK</button>
     </div>
     <div id="trophies" hidden>
       <p><span data-t="achTitle">ACHIEVEMENTS</span> · <span id="trophyCount"></span></p>
@@ -234,6 +250,7 @@
       <button class="back" data-t="back">BACK</button>
     </div>
   </div>
+  <div id="tut" hidden aria-live="polite"><p id="tutText"></p><div><button id="tutNext"></button><button id="tutSkip" data-t="tutSkip">SKIP TUTORIAL</button></div></div>
   <div id="toasts" aria-live="polite"></div>
   <canvas id="intro" width="100" height="170" aria-label="Fruit Salad"></canvas>
   <script type="module" src="main.js"></script>
