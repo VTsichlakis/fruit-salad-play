@@ -1,9 +1,9 @@
 // Optional rewarded ads: Google AdMob through @capacitor-community/admob, only inside the Android app.
 // In a browser there are none, unless the page is opened with ?fakeads to try the buttons.
-// BEFORE RELEASE: put your own rewarded ad unit below and your app ID in android strings.xml (admob_app_id),
-// and set TESTING = false. Never tap real ads on your own phone: AdMob can close the account for it.
-const AD_UNIT = 'ca-app-pub-3940256099942544/5224354917'; // Google's test rewarded ad unit
-const TESTING = true;
+// Real AdMob IDs (app ID is in android strings.xml, admob_app_id). For a test build set TESTING = true.
+// Never tap real ads on your own phone: AdMob can close the account for it.
+const AD_UNIT = 'ca-app-pub-1490625190635485/1016096903'; // Fruit Salad rewarded ad unit
+const TESTING = false;
 
 // ?fakeads: a pretend ad that rewards after half a second, to try the flow without the app
 function fakeAdMob() {
@@ -40,7 +40,8 @@ export async function initAds(onChange) {
 
 async function load() {
   ready = false;
-  try { await AdMob.prepareRewardVideoAd({ adId: AD_UNIT, isTesting: TESTING }); ready = true; } catch {}
+  try { await AdMob.prepareRewardVideoAd({ adId: AD_UNIT, isTesting: TESTING }); ready = true; }
+  catch { setTimeout(load, 60000); } // no ad right now (a new ad unit, no network): try again in a minute
   changed();
 }
 

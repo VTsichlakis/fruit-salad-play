@@ -16,6 +16,8 @@ export async function planReminder(streak, playedToday, text, ask) {
     at.setHours(22, 0, 0, 0);
     if (playedToday) at.setDate(at.getDate() + 1); // played today: remind tomorrow evening
     else if (at <= new Date()) return; // already past 22:00, and the app is open now anyway
-    await LN.schedule({ notifications: [{ id: ID, title: 'Fruit Salad', body: text, schedule: { at, allowWhileIdle: true } }] });
+    // isExactNotification: false, else the plugin opens Android's "Alarms & reminders" settings on every schedule
+    // (the app can never get that permission: the manifest removes it)
+    await LN.schedule({ notifications: [{ id: ID, title: 'Fruit Salad', body: text, isExactNotification: false, schedule: { at, allowWhileIdle: true } }] });
   } catch {} // no notifications: the game works the same
 }

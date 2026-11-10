@@ -31,7 +31,7 @@ const SPAWN_Y = 2;     // rows 0-1 hold the countdown bar
 const PAD = 0.14;      // share of the screen height kept free under the well for the dragging finger
 const PAD_MIN = 64;    // ...but never less than this many css px
 const BOARD = 5;       // scores kept per difficulty
-const HELPS = { choc: 3, knife: 3, blend: 3, quake: 3 }; // uses of each help per game, offered when you lose
+const HELPS = { choc: 3, knife: 3, blend: 3, quake: 3 }; // helps you own at first; like rainbows they carry over between games
 const BLAST_R = 18;    // chocolate blast radius in grains
 const KNIFE_H = 5;     // knife cuts this many rows above and below where it's dropped
 const BLEND_R = 16;    // blender radius in grains
@@ -40,9 +40,12 @@ const RAINBOW_CHANCE = 0.05; // per fruit, in a game you spend a rainbow on
 const RAINBOW_START = 3;     // rainbows you own at first; unlike the other helps they carry over between games
 const RAINBOW_ADS = 3; // rewarded ads for a rainbow fruit, per day
 // Weekly Clear 40 challenge: finish under this many minutes on each difficulty; the reward for each.
-const CLEAR_WEEK = { lo: 10, med: 9, hi: 8 }, CLEAR_PRIZE = { lo: 'help', med: 'help', hi: 'rainbow' };
-// Score achievements per difficulty: the score to reach in one game of that mode (ESCORE Endless, TSCORE 3 MIN).
-const SCORE_GOAL = { ESCORE: { lo: 200000, med: 400000, hi: 600000 }, TSCORE: { lo: 30000, med: 40000, hi: 50000 } };
+// Clear 40 weekly challenge: finish under 9:00, 7:00 and 5:00 (minutes), at any difficulty. The keys are the old
+// per-difficulty ones, so the saved stats keep working.
+const CLEAR_WEEK = { lo: 9, med: 7, hi: 5 }, CLEAR_PRIZE = { lo: 'help', med: 'help', hi: 'rainbow' };
+// Score achievements, 3 levels each: the score to reach in one game of that mode (ESCORE Endless, TSCORE 3 MIN),
+// at any difficulty. The ids keep their old _lo/_med/_hi names so achievements already won stay won.
+const SCORE_GOAL = { ESCORE: { lo: 500000, med: 800000, hi: 1000000 }, TSCORE: { lo: 30000, med: 50000, hi: 60000 } };
 const SCORE_MODE = { ESCORE: 'endless', TSCORE: 'time' };
 const count = v => Math.max(0, Math.floor(+v) || 0); // stored numbers: whole and not negative, whatever is in storage
 // Achievements besides the weekly challenges, in display order: id: [group, reward, progress → [now, goal]].
@@ -82,6 +85,11 @@ const ICONS = {
     rows: ['L.L.......L.L', '.L.L.....L.L.', '.............', 'DDDDDYDDDDDDD', 'DdDDYYdDDdDDD', 'DDDDYdDDDDDdD',
       'DdDDDYYDDDDDD', 'DDDDDDYdDdDDD', 'DdDdDYYDDDDdD', 'DDDDDYDDDDDDD', 'DDdDYYDDdDDDD', 'DDDDYDDDDDDdD',
       'DdDDDYDDDDDDD', 'ddddddddddddd'] },
+  box: { // a reward box: brown cardboard with a strip of tape
+    col: { K: [50, 30, 20], C: [205, 150, 85], c: [160, 105, 55], T: [240, 220, 170] },
+    rows: ['.............', '..KKKKKKKKK..', '.KCCCCTCCCCK.', 'KCCCCCTCCCCCK', 'KKKKKKTKKKKKK', 'KcCCCCTCCCCcK',
+      'KcCCCCTCCCCcK', 'KcCCCCTCCCCcK', 'KcCCCCCCCCCcK', 'KcCCCCCCCCCcK', 'KcCCCCCCCCCcK', 'KcccccccccccK',
+      'KKKKKKKKKKKKK', '.............'] },
   chest: { // the weekly chest: wood with gold bands and a lock
     col: { K: [50, 30, 20], B: [120, 70, 35], b: [160, 100, 50], G: [230, 190, 70], g: [170, 130, 40], Y: [255, 240, 150] },
     rows: ['.............', '..KKKKKKKKK..', '.KBBBBBBBBBK.', 'KBbbbbbbbbbBK', 'KBbbbbbbbbbBK', 'KGGGGGGGGGGGK',
@@ -109,11 +117,6 @@ const ICONS = {
     rows: ['....SSSSS....', '...S.....S...', '..S.......S..', '..S.......S..', '..S.......S..', 'KKKKKKKKKKKKK',
       'KYYYYYYYYYYgK', 'KYYYYKKYYYYgK', 'KYYYYKKYYYYgK', 'KYYYYYKYYYYgK', 'KYYYYYKYYYYgK', 'KYYYYYYYYYYgK',
       'KgggggggggggK', '.KKKKKKKKKKK.'] },
-  trash: { // reset scores
-    col: { K: [80, 80, 95], G: [185, 190, 205], g: [135, 140, 155], W: [240, 245, 255] },
-    rows: ['.....KKK.....', '....K...K....', 'KKKKKKKKKKKKK', 'KWGGGGGGGGGgK', 'KKKKKKKKKKKKK', '.KWGgGgGgGgK.',
-      '.KWGgGgGgGgK.', '.KWGgGgGgGgK.', '.KWGgGgGgGgK.', '.KWGgGgGgGgK.', '.KWGgGgGgGgK.', '.KWGgGgGgGgK.',
-      '.KWGGGGGGGgK.', '..KKKKKKKKK..'] },
   music: { // two pink eighth notes
     col: { N: [255, 100, 190], n: [190, 50, 140], W: [255, 205, 235] },
     rows: ['.............', '....nNNNNNNN.', '....NNNNNNNN.', '....N......N.', '....N......N.', '....N......N.',
@@ -143,11 +146,11 @@ let grid = new Uint8Array(W * H), piece = null, next = null, score = 0, lines = 
 let state = 'intro', overAt = 0, holdLeft = 0, holdTime = 3, fallAcc = 0, sandAcc = 0, diff = loadDiff();
 let flash = null, flashMask = null, flashT = 0, frame = 0, g0 = null, combo = makeCombo(COMBO_TIME);
 let touchFast = false, shake = 0, quake = 0, shown = '', scale = 1; // scale: css px per grain, set by fit()
-let fire = [], extras = loadExtras(), helps = fullHelps(), carry = null; // carry: the help waiting for a tap, { tool, at: [gx, gy] | null, mid }
+let fire = [], helps = loadHelps(), carry = null; // carry: the help waiting for a tap, { tool, at: [gx, gy] | null, mid }
 let keepPiece = false; // a help used mid-game (from the 💪 window): the falling fruit stays after the sand settles
-let stats = loadStats(), usedHelp = false, gameFruits = new Set(); // per game: a help used, fruits cleared
+let stats = loadStats(), usedHelp = false, gameFruits = new Set(), boxes = loadBoxes(), gameWins = []; // per game: a help used, fruits cleared
 checkWeek();
-let quakeT = 0, rainbowOn = false, rainbows = loadRainbows(), mode = loadMode(), playT = 0, infoShown = '';
+let quakeT = 0, rainbowOn = false, rainbows = loadRainbows(), mode = loadMode(), playT = 0, infoShown = '', progShown = null;
 const carryEl = $('carry');
 const MENU_TITLE = $('title').textContent; // game over rewrites it
 const App = window.Capacitor?.Plugins?.App; // only inside the Android app (@capacitor/app)
@@ -164,14 +167,14 @@ function loadRainbows() {
   catch { return RAINBOW_START; }
 }
 function saveRainbows() { try { localStorage.setItem('rainbows', rainbows); } catch {} }
-// extras: helps from daily gifts, on top of the 3 free per game; they stay until used (the free ones go first)
-function loadExtras() {
-  let e = null;
-  try { e = JSON.parse(localStorage.getItem('extras')); } catch {}
-  return Object.fromEntries(Object.keys(HELPS).map(t => [t, count(e?.[t])]));
+// helps: the power-ups you own, kept until used. A first run starts with HELPS; an older save had 3 free per game
+// plus the gifted 'extras', so it starts with both.
+function loadHelps() {
+  let h = null, e = null;
+  try { h = JSON.parse(localStorage.getItem('helps')); e = JSON.parse(localStorage.getItem('extras')); } catch {}
+  return Object.fromEntries(Object.keys(HELPS).map(t => [t, h ? count(h[t]) : HELPS[t] + count(e?.[t])]));
 }
-function saveExtras() { try { localStorage.setItem('extras', JSON.stringify(extras)); } catch {} }
-function fullHelps() { return Object.fromEntries(Object.keys(HELPS).map(t => [t, HELPS[t] + extras[t]])); }
+function saveHelps() { try { localStorage.setItem('helps', JSON.stringify(helps)); } catch {} }
 // stats for the achievements: lines in all games and per fruit class (index 1-4), lines with rainbow sand,
 // helps used, games played, days in a row (and the day of the last game), and which ACH are got
 function loadStats() {
@@ -180,18 +183,29 @@ function loadStats() {
   return { lines: count(s?.lines), fruit: [0, 1, 2, 3, 4].map(c => count(s?.fruit?.[c])), rainbowLines: count(s?.rainbowLines),
     used: Object.fromEntries(Object.keys(HELPS).map(t => [t, count(s?.used?.[t])])),
     games: count(s?.games), streak: count(s?.streak), day: count(s?.day), week: count(s?.week), chest: s?.chest ? 1 : 0,
-    clearBest: Object.fromEntries(Object.keys(CLEAR_WEEK).map(d => [d, count(s?.clearBest?.[d])])), // this week's best Clear 40, ms
+    clearBest: Object.fromEntries(Object.keys(CLEAR_WEEK).map(d => [d, count(s?.clearBest?.[d])])), // this week's best Clear 40, ms (same in each)
     clearChest: s?.clearChest ? 1 : 0,
     // chests given for every 7 days in a row / every 100 games (before they repeated, each could be won once)
     gamesChests: count(s?.gamesChests) || (s?.got?.games100 ? 1 : 0), // 100-game milestones already rewarded
     got: Object.fromEntries(Object.keys(ACH).filter(id => s?.got?.[id]).map(id => [id, 1])) };
 }
+// Rewards wait in boxes ({ id, name, kind: 'help' | 'rainbow' | 'chest', times }) until opened: at the end of the
+// game they were won in, or later from the 💪 window. gameWins: ids of this game's, for the end-of-game list.
+function loadBoxes() {
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem('boxes')); } catch {}
+  return Array.isArray(b) ? b.filter(x => x && ['help', 'rainbow', 'chest'].includes(x.kind)).map((x, i) => ({
+    id: String(x.id ?? i), name: String(x.name ?? ''), kind: x.kind, times: Math.max(1, count(x.times)) })) : [];
+}
+function saveBoxes() { try { localStorage.setItem('boxes', JSON.stringify(boxes)); } catch {} }
 function saveStats() { try { localStorage.setItem('stats', JSON.stringify(stats)); } catch {} }
 // The fruit stars are a weekly challenge: a new week (from Monday) starts them, and the chest, again.
 function checkWeek() {
   const w = weekNumber(new Date());
   if (stats.week === w) return;
-  stats.week = w; stats.fruit = [0, 0, 0, 0, 0]; stats.chest = 0; stats.clearBest = { lo: 0, med: 0, hi: 0 }; stats.clearChest = 0; saveStats();
+  stats.week = w; stats.fruit = [0, 0, 0, 0, 0]; stats.chest = 0; stats.clearBest = { lo: 0, med: 0, hi: 0 }; stats.clearChest = 0;
+  for (const id of Object.keys(stats.got)) if (/^[et]score_/.test(id)) delete stats.got[id]; // the score challenges are weekly too
+  saveStats();
 }
 // boards[mode][difficulty]: top scores, or for Clear 40 the fastest times in ms
 function loadBoards() {
@@ -211,7 +225,7 @@ const bestOf = (m, d) => boards[m][d].length ? fmt(m, Number(boards[m][d][0])) :
 
 // A random fruit, already turned the way it will fall (0-3 quarter turns), so the preview shows it as it comes.
 function rndFruit() {
-  if (tut && tut.step !== 'done') return FRUITS[0].sprite; // the tutorial's bananas, lying flat
+  if (tut?.step === 'drop') return FRUITS[tut.fruit].sprite; // the floor's fruit, so a clear can come
   let s = rainbowOn && Math.random() < RAINBOW_CHANCE ? RAINBOW.sprite : FRUITS[Math.floor(Math.random() * FRUITS.length)].sprite;
   for (let r = Math.floor(Math.random() * 4); r > 0; r--) s = rot(s);
   return s;
@@ -223,7 +237,7 @@ const fireLevel = () => combo.mult >= 7 ? 3 : combo.mult >= 5 ? 2 : combo.mult >
 
 
 // --- Tutorial: the first time the app opens (and from How to play), a short guided game on Easy. A floor of banana
-// sand with a gap waits at the bottom, the fruits are bananas, and each step waits for the player to do what it says.
+// sand with a gap waits at the bottom (it takes the colour of the fruit to drop), and each step waits for the player to do what it says.
 // Nothing in it counts: no stats, scores or achievements.
 const TUT_GAP = [38, 62]; // columns of the gap in the tutorial floor
 const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', power: 'tutPower', lose: 'tutLose', done: 'tutDone' };
@@ -233,6 +247,7 @@ const tutSeen = () => { try { return localStorage.getItem('tutDone') === '1'; } 
 function startTutorial() {
   $('settings').hidden = true; $('overlay').hidden = true;
   tut = { step: 'move', saved: { mode, diff } };
+  helps = { ...HELPS }; // the tutorial lends a full set (its helps are free), even to a player who has none
   mode = 'endless'; diff = 'lo'; rainbowOn = false;
   newGame(true);
   for (let y = H - 4; y < H; y++) for (let x = 0; x < W; x++)
@@ -245,6 +260,11 @@ function tutStep(step) {
   tut.step = step; tut.freeze = step === 'cleared' || step === 'lose' || step === 'done'; // reading time: the game waits
   if (step === 'cleared') sfx.prize();
   if (step === 'power') tutFill();
+  if (step === 'drop') { // the floor turns into this fruit's sand, and the next ones are the same fruit
+    tut.fruit = (piece.s.px.find(Boolean) >> 2) - 1;
+    for (let i = (H - 4) * W; i < W * H; i++) if (grid[i]) grid[i] = (tut.fruit + 1) * 4 + (grid[i] & 3);
+    next = rndFruit(); drawNext();
+  }
   tutShow();
 }
 function tutShow(key = TUT_TEXT[tut.step]) {
@@ -267,14 +287,14 @@ function tutTick() {
 }
 function endTutorial() {
   if (!tut) return;
-  ({ mode, diff } = tut.saved); tut = null; $('tut').hidden = true;
+  ({ mode, diff } = tut.saved); tut = null; $('tut').hidden = true; helps = loadHelps();
   try { localStorage.setItem('tutDone', '1'); } catch {}
 }
 
 function newGame(tutorial = false) {
   grid = new Uint8Array(W * H); score = 0; lines = 0; flash = null; combo = makeCombo(COMBO_TIME);
-  sandAcc = 0; fire = []; helps = fullHelps(); carry = null; keepPiece = false; carryEl.hidden = true; $('rescue').hidden = true; playT = 0;
-  usedHelp = false; gameFruits = new Set();
+  sandAcc = 0; fire = []; carry = null; aimUi(null); keepPiece = false; carryEl.hidden = true; $('rescue').hidden = true; playT = 0;
+  usedHelp = false; gameFruits = new Set(); gameWins = []; $('wins').hidden = true; // Enter can start a game past it
   if (!tutorial) countGame();
   if (mode === 'clear') stoneFloor(grid, STONE_ROWS[diff]);
   next = rndFruit(); spawn(); state = 'play'; $('overlay').hidden = true; hud();
@@ -286,10 +306,10 @@ function countGame() {
   const was = stats.streak;
   stats.streak = nextStreak(stats.streak, stats.day, today); stats.day = today; stats.games++; saveStats();
   // Milestones whose chests grow: 7 days in a row give 1 chest, 14 give 2, 21 give 3…; 100 games give 1, 200 give 2…
-  if (stats.streak !== was && stats.streak % 7 === 0) toast(t('tAchChest', t('daysName', stats.streak), giveChest(stats.streak / 7)));
+  if (stats.streak !== was && stats.streak % 7 === 0) earn(t('daysName', stats.streak), 'chest', stats.streak / 7);
   while (Math.floor(stats.games / 100) > stats.gamesChests) {
     const k = ++stats.gamesChests; saveStats();
-    toast(t('tAchChest', t('gamesName', k * 100), giveChest(k)));
+    earn(t('gamesName', k * 100), 'chest', k);
   }
   remind(false);
 }
@@ -299,7 +319,9 @@ function spawn() {
   next = rndFruit();
   piece = { s, x: (W - s.w) >> 1, y: SPAWN_Y, falling: false };
   holdTime = 1 - 0.1 * level(); // 1s → 0.2s at MAX_LEVEL
-  holdLeft = holdTime; fallAcc = 0; g0 = null; touchFast = false; keys.down = 0; // a new fruit needs a new ↓
+  holdLeft = holdTime; fallAcc = 0; touchFast = false; keys.down = 0; // a new fruit needs a new ↓
+  // a finger still down keeps steering: the drag starts again from where it is now, for this fruit (no tap-rotate on lift)
+  if (g0) Object.assign(g0, { x: g0.lx ?? g0.x, y: g0.ly ?? g0.y, px: piece.x, axis: null, t: -1e9 });
   drawNext();
 }
 
@@ -344,7 +366,13 @@ function pick(e) { // a tap on a help in the "you lost" prompt: the next tap on 
 function arm(tool, mid) {
   carry = { tool, at: null, mid };
   drawIcon(carryEl, tool);
-  toast(t('aimHint'), false);
+  aimUi(tool);
+}
+// While a help waits: what it does at the top, and CANCEL under the well (a tap there lands off the well: nothing used).
+const TOOL_TEXT = { choc: 'hChoc', knife: 'hKnife', blend: 'hBlend', quake: 'hQuake' };
+function aimUi(tool) {
+  $('aimNote').hidden = !tool; $('pad').textContent = t(tool ? 'cancel' : 'drag');
+  if (tool) $('aimNote').replaceChildren(...icons([tool]), t(TOOL_TEXT[tool]), Object.assign(document.createElement('small'), { textContent: t('aimHint') }));
 }
 
 // From the 💪 window during play: the game waits ('aim') until a tap on the sand uses it; the quake goes at once.
@@ -357,17 +385,15 @@ function useMidGame(tool) {
   arm(tool, true);
 }
 
-// The free helps go first; once the count left is below the gifted extras, those are being used up.
 function spend(tool) {
   if (tut) { if (tut.step === 'power') tutStep('lose'); return; } // the tutorial's are free: nothing is used up or counted
-  helps[tool]--;
-  if (extras[tool] > helps[tool]) { extras[tool] = helps[tool]; saveExtras(); }
+  helps[tool]--; saveHelps();
   usedHelp = true; stats.used[tool]++; saveStats();
   if (stats.used[tool] >= 25) unlock('use_' + tool);
 }
 
 function startQuake() {
-  spend('quake'); $('rescue').hidden = true;
+  spend('quake'); $('rescue').hidden = true; toast(t('hQuake'), false);
   state = 'quake'; quakeT = QUAKE_TIME; hud();
   sfx.rumble(); vibrate([250, 80, 250, 80, 400]);
 }
@@ -397,7 +423,7 @@ function moveCarry(e) {
 
 function dropCarry() {
   const { tool, at, mid } = carry;
-  carry = null; carryEl.hidden = true;
+  carry = null; carryEl.hidden = true; aimUi(null);
   if (!at) { if (mid) { state = 'play'; keepPiece = false; } else $('rescue').hidden = false; return; } // off the well: nothing used
   spend(tool);
   const [x, y] = at;
@@ -443,12 +469,13 @@ function gameOver(reason) {
   }
   $('title').textContent = t(reason === 'cleared' ? 'cleared' : reason === 'time' ? 'timesUp' : 'gameOver');
   const what = !timed ? t('scoreIs', score) : reason === 'cleared' ? t('timeIs', clock(playT, true)) : t('linesToGo', CLEAR_LINES - lines);
-  $('msg').textContent = rank >= 0 ? `${what} · ${t('rankOn', rank + 1, t(diff))}` : what;
+  $('msg').textContent = rank >= 0 ? `${what} · ${t('rankOn', rank + 1, t(diff))}` : what; $('msg').hidden = false;
   drawBoard(rank);
   $('overlay').hidden = false; hud();
   music.stop(); music.speed(1); sfx.gameOver();
   checkScore();
   if (reason === 'cleared') weeklyClear(Math.round(playT * 1000));
+  drawWins();
   remind(true); // a good moment to ask for the notification permission
   setTimeout(() => { if (state === 'over') music.start('menu'); }, 1500); // after the jingle
 }
@@ -460,16 +487,15 @@ function countLine(fruits, withRainbow, bridged) {
   for (const c of fruits) {
     const k = tier(stats.fruit[c]++);
     if (tier(stats.fruit[c]) > k)
-      toast(t('tTier', t('fruits')[c - 1], t('medals')[k], TIERS[k], reward(k === TIERS.length - 1 ? 'rainbow' : 'help')));
+      earn(`${t('fruits')[c - 1]} · ${t('medals')[k]}`, k === TIERS.length - 1 ? 'rainbow' : 'help');
     gameFruits.add(c);
   }
   if (!stats.chest && stats.fruit.slice(1).every(n => tier(n) === TIERS.length)) { // all 20 stars this week
-    stats.chest = 1; toast(t('tChest', giveChest()));
+    stats.chest = 1; earn(t('chest'), 'chest');
   }
   const was = stats.lines++;
   if (rainbowsEarned(was, stats.lines)) {
-    rainbows++; saveRainbows();
-    toast(t('tRainbow', stats.lines));
+    earn(`🌈 ${t('lines', stats.lines)}`, 'rainbow');
   }
   if (withRainbow) stats.rainbowLines++;
   saveStats();
@@ -484,17 +510,26 @@ function countLine(fruits, withRainbow, bridged) {
   checkScore();
 }
 
-// A finished Clear 40 run of ms: this week's best time, and the reward the first time it beats the limit this week.
-// When all three are won in the same week, the Clear 40 chest opens too.
+// A finished Clear 40 run of ms (any difficulty): this week's best time, and a reward for each time limit it beats
+// for the first time this week. When all three are won in the same week, the Clear 40 chest opens too.
 const clearWon = d => stats.clearBest[d] > 0 && stats.clearBest[d] < CLEAR_WEEK[d] * 60000;
 function weeklyClear(ms) {
   checkWeek();
-  const won = clearWon(diff), best = stats.clearBest[diff];
-  if (best && best <= ms) return;
-  stats.clearBest[diff] = ms; saveStats();
-  if (won || !clearWon(diff)) return; // already won this week, or not under the limit
-  toast(t('tAch', `${t('clear')} · ${t(diff)} · ${CLEAR_WEEK[diff]}:00`, reward(CLEAR_PRIZE[diff])));
-  if (!stats.clearChest && Object.keys(CLEAR_WEEK).every(clearWon)) { stats.clearChest = 1; saveStats(); toast(t('tClearChest', giveChest())); }
+  for (const d of Object.keys(CLEAR_WEEK)) {
+    if (stats.clearBest[d] && stats.clearBest[d] <= ms) continue;
+    const was = clearWon(d);
+    stats.clearBest[d] = ms;
+    if (!was && clearWon(d)) earn(`${t('clear')} · < ${CLEAR_WEEK[d]}:00`, CLEAR_PRIZE[d]);
+  }
+  saveStats();
+  checkBonusChest();
+}
+// The challenge chest: opens when Clear 40's 3 times and both score rows (3 each) are all won in the same week.
+const SCORE_IDS = Object.keys(SCORE_GOAL).flatMap(g => Object.keys(SCORE_GOAL[g]).map(d => `${g.toLowerCase()}_${d}`));
+const BONUS_ALL = Object.keys(CLEAR_WEEK).length + SCORE_IDS.length;
+const bonusLit = () => Object.keys(CLEAR_WEEK).filter(clearWon).length + SCORE_IDS.filter(id => stats.got[id]).length;
+function checkBonusChest() {
+  if (!stats.clearChest && bonusLit() === BONUS_ALL) { stats.clearChest = 1; saveStats(); earn(t('clearChest'), 'chest'); }
 }
 
 // A chest: one of every power-up, kept until used. Returns "+1 X, +1 Y…" for its note.
@@ -509,31 +544,40 @@ function remind(ask) {
   planReminder(streak, stats.day === today, t('remindText', streak), ask);
 }
 
-function checkScore() {
-  for (const [g, m] of Object.entries(SCORE_MODE)) if (mode === m && score >= SCORE_GOAL[g][diff]) unlock(`${g.toLowerCase()}_${diff}`);
-}
-// Records made before these achievements existed count too (boards hold each mode's best scores).
-function checkBoards() {
+function checkScore() { // weekly: checkWeek clears these each Monday
+  checkWeek();
   for (const [g, m] of Object.entries(SCORE_MODE)) for (const [d, goal] of Object.entries(SCORE_GOAL[g]))
-    if (Number(boards[m][d][0]) >= goal) unlock(`${g.toLowerCase()}_${d}`);
+    if (mode === m && score >= goal) unlock(`${g.toLowerCase()}_${d}`);
+  checkBonusChest();
 }
-// An achievement's name: per-difficulty score ones are named after their row and difficulty.
+// An achievement's name: score ones are named after their row and the score to reach.
 function achName(id) {
-  const m = id.match(/^([et]score)_(lo|med|hi)$/);
-  return m ? `${t('groups')[m[1].toUpperCase()]} · ${t(m[2])}` : t('ach_' + id)[0];
+  const m = id.match(/^([et]score)_(lo|med|hi)$/), g = m?.[1].toUpperCase();
+  return m ? `${t('groups')[g]} · ${SCORE_GOAL[g][m[2]].toLocaleString(lang)}` : t('ach_' + id)[0];
 }
 
 // An ACH achievement got: once only, with its reward.
 function unlock(id) {
   if (stats.got[id]) return;
   stats.got[id] = 1; saveStats();
-  const name = achName(id);
-  toast(ACH[id][1] === 'chest' ? t('tAchChest', name, giveChest()) : t('tAch', name, reward(ACH[id][1])));
+  earn(achName(id), ACH[id][1]);
 }
-function reward(kind) { // gives it; returns its name for the toast
-  if (kind !== 'rainbow') return t(giveHelp());
-  rainbows++; saveRainbows(); hud();
-  return t('rainbowFruit');
+// A reward won: into a box, with the fanfare but no note over the game.
+function earn(name, kind, times = 1) {
+  const box = { id: `${Date.now()}-${boxes.length}`, name, kind, times };
+  boxes.push(box); saveBoxes(); sfx.prize();
+  if (inGame() || state === 'over') gameWins.push(box.id); // score ones are won as the game ends
+  hud();
+}
+// Opens a box: gives what's in it. Returns { text: "+1 KNIFE" (a chest: the list), got: icon names }, or null.
+function openBox(id) {
+  const i = boxes.findIndex(b => b.id === id);
+  if (i < 0) return null;
+  const [b] = boxes.splice(i, 1); saveBoxes();
+  if (b.kind === 'chest') return { text: giveChest(b.times), got: Object.keys(HELPS) };
+  if (b.kind === 'rainbow') { rainbows++; saveRainbows(); hud(); return { text: `+1 ${t('rainbowFruit')}`, got: ['rainbow'] }; }
+  const k = giveHelp();
+  return { text: `+1 ${t(k)}`, got: [k] };
 }
 
 // A short note at the top (rewards, achievements), with a little fanfare.
@@ -546,7 +590,7 @@ function toast(text, fanfare = true) {
 }
 
 // Optional rewarded ads (ads.js): an AD badge on a power-up that has run out (the "you lost" window and the
-// power-ups window) gives one of it; and with no rainbow
+// power-ups window) gives one of it; the 💪 window on the menu has an ad for a random one; and with no rainbow
 // fruit left, the badge on it before a game gives one, up to RAINBOW_ADS times a day. Sound is held while it plays.
 function rainbowAdsLeft() {
   let a = null;
@@ -554,7 +598,7 @@ function rainbowAdsLeft() {
   return a?.day === dayNumber(new Date()) ? Math.max(0, RAINBOW_ADS - count(a.n)) : RAINBOW_ADS;
 }
 const rainbowAd = () => adReady() && rainbowAdsLeft() > 0;
-async function adHelp(tool) {
+async function adHelp(tool) { // tool: undefined = a random one
   if (await watchAd()) toast(t('tAd', t(giveHelp(tool))));
   hud();
 }
@@ -566,20 +610,18 @@ async function watchAd() {
   return result === 'rewarded';
 }
 
-// Once a day, on the menu: one random help, kept until used.
-function dailyGift() {
-  const today = new Date().toDateString();
-  try {
-    if (localStorage.getItem('gift') === today) return;
-    localStorage.setItem('gift', today);
-  } catch { return; } // no storage: no way to give it only once a day
-  toast(t('tGift', t(giveHelp())));
+// Once a day: one random help, taken from the 💪 window. No storage: no way to give it only once a day.
+function giftReady() { try { return localStorage.getItem('gift') !== new Date().toDateString(); } catch { return false; } }
+function claimGift() {
+  if (!giftReady()) return null;
+  try { localStorage.setItem('gift', new Date().toDateString()); } catch { return null; }
+  const k = giveHelp();
+  return { text: `+1 ${t(k)}`, got: [k] };
 }
 
 // A free random help (daily gift, achievement), kept until used; mid-game it is usable at once. Returns which.
 function giveHelp(t = Object.keys(HELPS)[Math.floor(Math.random() * Object.keys(HELPS).length)]) {
-  extras[t]++; saveExtras();
-  if (inGame()) helps[t]++; else helps = fullHelps(); // mid-game (or paused): keep what this game has used
+  helps[t]++; saveHelps();
   hud();
   return t;
 }
@@ -666,7 +708,7 @@ function render() {
     const c = blink && flashMask[i] ? WHITE : v ? PALETTE[v] : y === HOLD_ROWS && x % 4 < 2 ? LINE : BG;
     buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = 255;
   }
-  if (piece && (state === 'play' || state === 'aim' || keepPiece)) {
+  if (piece && (state === 'play' || state === 'count' || state === 'aim' || keepPiece)) {
     if (!piece.falling) {
       const f = holdLeft / holdTime, bar = [255, 255 * f, 255 * f];
       for (let x = 0; x < PW * f; x++) { put(x, 0, bar); put(x, 1, bar); }
@@ -697,9 +739,15 @@ function render() {
     }
   }
   ctx.putImageData(img, 0, 0);
-  multEl.style.backgroundSize = `${combo.mult > 1 ? combo.left * 100 : 0}% 3px`; // bonus time left
+  multEl.style.backgroundSize = `${combo.mult > 1 ? combo.left * 100 : 0}% 5px`; // bonus time left
   const txt = info();
   if (txt !== infoShown) { $('info').textContent = txt; infoShown = txt; } // the clock ticks here, not in hud()
+  const p = mode === 'time' ? 1 - playT / TIME_LIMIT : mode === 'clear' ? lines / CLEAR_LINES : -1;
+  const ps = p < 0 || !inGame() ? '' : `${Math.round(Math.min(1, Math.max(0, p)) * 1000) / 10}%${mode === 'time' && TIME_LIMIT - playT < 30 ? ' red' : ''}`;
+  if (ps !== progShown) { // the bar only changes in steps of 0.1%
+    progShown = ps; $('prog').hidden = !ps;
+    $('prog').style.backgroundSize = `${parseFloat(ps) || 0}% 100%, auto`; $('prog').style.color = ps.endsWith('red') ? '#ce5239' : '#72b754';
+  }
   // landing: a short 3px drop (as in the original); chocolate: a bigger random rattle that dies down
   if (shake > 0) shake--;
   if (quake > 0) quake--;
@@ -738,6 +786,9 @@ function drawIcon(c, name) {
   g.putImageData(d, 0, 0);
 }
 
+// Pixel icons as canvases: power-ups, 'box', or 'rainbow' (the rainbow fruit).
+const icons = names => names.map(n => { const c = document.createElement('canvas'); n === 'rainbow' ? paintSprite(c, RAINBOW.sprite) : drawIcon(c, n); return c; });
+
 function paintSprite(c, s) {
   c.width = s.w; c.height = s.h;
   const g = c.getContext('2d'), d = g.createImageData(s.w, s.h);
@@ -767,13 +818,41 @@ function drawBoard(rank = -1) {
     ).join('')}</div>`).join('');
 }
 
+// End of a game: this game's rewards, each with OPEN (then what was in it). Unopened ones wait in the 💪 window.
+// Names are our own texts (lang.js) or numbers, so this HTML is safe.
+function drawWins() {
+  const mine = state === 'over' ? gameWins.map(id => boxes.find(b => b.id === id)).filter(Boolean) : [];
+  $('wins').hidden = !mine.length; $('winsTitle').textContent = t('youGot', mine.length);
+  $('winList').innerHTML = mine.map(b => `<button class="win" data-box="${b.id}"><span class="ico"><canvas data-icon="box"></canvas></span><span>${b.name}</span><small>${t('openBox')}</small></button>`).join('');
+  for (const c of $('winList').querySelectorAll('canvas')) drawIcon(c, 'box');
+}
+const closeWins = () => { gameWins = []; drawWins(); }; // unopened boxes stay in the 💪 window
+$('winsOk').addEventListener('click', closeWins);
+$('winsX').addEventListener('click', closeWins);
+$('winList').addEventListener('click', e => {
+  const btn = e.target.closest('[data-box]');
+  if (!btn || state !== 'over') return;
+  const r = openBox(btn.dataset.box);
+  if (!r) return;
+  const tile = Object.assign(document.createElement('div'), { className: 'win opened' }); // same place and size as the box was
+  const ico = Object.assign(document.createElement('span'), { className: r.got.length > 1 ? 'ico many' : 'ico' });
+  ico.append(...icons(r.got));
+  tile.append(ico, btn.children[1], Object.assign(document.createElement('small'), { textContent: r.text }));
+  btn.replaceWith(tile); sfx.prize(); hud();
+});
+
 const info = () => mode === 'time' ? `⏱ ${clock(Math.ceil(Math.max(0, TIME_LIMIT - playT)))} · ${t('lines', lines)}`
   : mode === 'clear' ? `⏱ ${clock(playT)} · ${t('toGo', Math.max(0, CLEAR_LINES - lines))}`
   : `${t('lv')} ${level() + 1} · ${t('lines', lines)}`;
 
 function hud() {
   $('score').textContent = score; $('best').textContent = bestOf(mode, diff);
-  multEl.textContent = combo.mult > 1 ? `x${combo.mult}` : '';
+  const m = combo.mult > 1 ? `x${combo.mult}` : '';
+  if (m !== multEl.textContent) { // a new combo step: pulse
+    multEl.textContent = m; multEl.classList.remove('pulse');
+    if (m) { void multEl.offsetWidth; multEl.classList.add('pulse'); } // reflow restarts the animation
+  }
+  $('score').classList.toggle('rec', mode !== 'clear' && score > 0 && score > (Number(boards[mode][diff][0]) || 0));
   multEl.style.color = FIRE_CSS[fireLevel()];
   for (const b of document.querySelectorAll('#diff button')) b.classList.toggle('on', b.dataset.d === diff);
   for (const b of document.querySelectorAll('#modes button')) b.classList.toggle('on', b.dataset.m === mode);
@@ -785,8 +864,15 @@ function hud() {
   }
   $('rbN').textContent = rainbows;
   $('rbGet').classList.toggle('adable', !rainbows && rainbowAd()); $('rbYes').disabled = !rainbows;
-  $('exit').hidden = state === 'menu' || state === 'over' || state === 'ask';
-  $('pow').hidden = inGame(); $('powSm').hidden = !inGame(); // in a game the small one sits by the power-up counts
+  $('exit').hidden = state === 'menu' || state === 'over' || state === 'ask'; // in a game ⏸ stands in for 🏆 and ⚙
+  $('trophy').hidden = $('gear').hidden = !$('exit').hidden;
+  $('pow').hidden = inGame(); $('bar').style.visibility = inGame() ? '' : 'hidden'; // hidden, not removed: the well keeps its size
+  const waiting = boxes.length + giftReady();
+  $('powBadge').hidden = !waiting; $('powBadge').textContent = waiting;
+  $('boxBtn').hidden = inGame() || !boxes.length; $('boxBtn').replaceChildren(...icons(['box']), t('openBoxes', boxes.length));
+  $('giftBtn').hidden = inGame() || !giftReady();
+  $('adRandom').hidden = inGame() || giftReady() || !adReady(); // a random power-up for an ad: menu only, once the gift is taken
+  $('modeInfo').textContent = t('info_' + mode);
 }
 
 // Leaving a game: the ✕ button, Esc and Android's back button all ask first; back on the menu closes the app.
@@ -796,22 +882,22 @@ function askQuit() {
   pause(); $('quit').hidden = false;
 }
 
-const PLAYING = ['play', 'rescue', 'settle', 'quake', 'aim'];
+const PLAYING = ['play', 'count', 'rescue', 'settle', 'quake', 'aim'];
 const inGame = () => PLAYING.includes(state === 'paused' ? pausedFrom : state);
 function pause() { pausedFrom = state; state = 'paused'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false; }
 function resume() { state = pausedFrom; $('quit').hidden = $('settings').hidden = true; document.activeElement?.blur(); }
 
 // The ⚙ / 🏆 window: switches, how to play, achievements, credits. Opened mid-game (or when the app
 // goes to the background) it is the pause menu until closed. `home`: the view it opened on, where BACK closes it.
-const VIEWS = ['setMain', 'welcome', 'howto', 'trophies', 'credits', 'powers'];
-let view = 'setMain', home = 'setMain', resetAt = -1e9;
+const VIEWS = ['pauseMain', 'setMain', 'about', 'welcome', 'howto', 'trophies', 'credits', 'powers'];
+const UP = { setMain: 'pauseMain', about: 'setMain', welcome: 'about', trophies: 'about', credits: 'about' }; // where BACK goes
+let view = 'setMain', home = 'setMain';
 // `atStart`: the short How to play at start-up, with DON'T SHOW THIS AGAIN instead of BACK.
 function openSettings(v = 'setMain', atStart = false) {
   if (carry || state === 'paused') return; // not over a dragged help or the "leave this game?" question
   const paused = PLAYING.includes(state);
   if (paused) pause();
-  $('setTitle').textContent = t(paused ? 'paused' : 'settings'); $('setGo').hidden = !paused;
-  $('resetTxt').textContent = t('reset'); resetAt = -1e9;
+  if (paused && v === 'setMain') v = 'pauseMain'; // mid-game it opens on CONTINUE / MAIN MENU / SETTINGS
   $('adPrivacy').hidden = !needsAdPrivacy();
   $('noShow').hidden = !atStart; $('welcome').querySelector('.back').hidden = atStart; // at start-up the ✕ closes it
   $('tutBtn').hidden = paused; // only from the menu: it starts a game
@@ -829,8 +915,9 @@ function show(v) {
   view = v;
   for (const id of VIEWS) $(id).hidden = id !== v;
   if (v === 'trophies') drawTrophies();
+  $('powNote').hidden = true; // a fresh look at the 💪 window
 }
-const back = () => view === home ? closeSettings() : show(home);
+const back = () => view === home ? closeSettings() : show(UP[view] ?? home);
 
 // The trophy screen. An achievement with rising levels gets one row of gifts, one per level (🎁 a power-up,
 // 🌈 a rainbow fruit, 🧰 a chest), dimmed until that level is won. First the weekly challenges, then the rest.
@@ -840,7 +927,7 @@ const TIERED = { COMBO: ['combo5', 'combo10'], ENDLESS: ['lv5', 'lv9'] }; // lev
 function drawTrophies() {
   // texts are our own (lang.js) and stats are sanitised numbers (loadStats), so this HTML is safe
   checkWeek();
-  const row = (cls, pic, name, small, right) => `<div class="${cls}">${pic}<span>${name}<br><small>${small}</small></span><b>${right}</b></div>`;
+  const row = (cls, pic, name, small, right) => `<div class="${cls}">${pic}<span>${name}${small ? `<br><small>${small}</small>` : ''}</span><b>${right}</b></div>`;
   const stars = stats.fruit.reduce((a, n) => a + tier(n), 0), all = FRUITS.length * TIERS.length;
   const done = text => `${text} · ✓ ${t('done')}`;
   const nextClear = Object.keys(CLEAR_WEEK).find(d => !clearWon(d)), cd = nextClear || 'hi'; // easiest not won yet
@@ -852,27 +939,25 @@ function drawTrophies() {
         gifts(TIERS.map((_, j) => [j === TIERS.length - 1 ? 'rainbow' : 'help', j < k])));
     }).join('')
     + row(`trophy${stats.chest ? '' : ' shut'}`, '<canvas data-icon="chest"></canvas>', t('chest'),
-      stats.chest ? t('chestOpened') : t('chestInfo', all), `${stars}/${all}`)
-    + row('ach got', '', t('clear'), nextClear ? `${t(cd)} &lt; ${CLEAR_WEEK[cd]}:00${cBest}` : done(`${t(cd)} &lt; ${CLEAR_WEEK[cd]}:00`),
-      gifts(Object.keys(CLEAR_WEEK).map(d => [CLEAR_PRIZE[d], clearWon(d)])))
-    + row(`trophy${stats.clearChest ? '' : ' shut'}`, '<canvas data-icon="chest"></canvas>', t('clearChest'),
-      stats.clearChest ? t('chestOpened') : t('clearChestInfo'), `${Object.keys(CLEAR_WEEK).filter(clearWon).length}/3`)
-    + `<p class="grp">${t('achTitle')}</p>`;
-  for (const g of ['COMBO', 'ESCORE', 'TSCORE', 'ENDLESS']) {
-    if (TIERED[g]) { // the next level's goal, or all done
-      const ids = TIERED[g], k = ids.filter(id => stats.got[id]).length;
-      html += row('ach got', '', t('groups')[g], k < ids.length ? t('ach_' + ids[k])[1] : done(t('ach_' + ids.at(-1))[1]), gifts(ids.map(id => [ACH[id][1], stats.got[id]])));
-    } else { // a gift per difficulty, lit once that score is reached there
-      const ids = Object.keys(SCORE_GOAL[g]).map(d => `${g.toLowerCase()}_${d}`), next = Object.keys(SCORE_GOAL[g]).find(d => !stats.got[`${g.toLowerCase()}_${d}`]);
-      const goal = d => `${t(d)} ≥ ${SCORE_GOAL[g][d].toLocaleString(lang)}`;
-      html += row('ach got', '', t('groups')[g], next ? goal(next) : done(goal('hi')),
-        gifts(ids.map(id => [ACH[id][1], stats.got[id]])));
-    }
+      stats.chest ? t('chestOpened') : '', `${stars}/${all}`)
+    + row('ach got', '', t('clear'), nextClear ? `&lt; ${CLEAR_WEEK[cd]}:00${cBest}` : done(`&lt; ${CLEAR_WEEK[cd]}:00`),
+      gifts(Object.keys(CLEAR_WEEK).map(d => [CLEAR_PRIZE[d], clearWon(d)])));
+  for (const g of ['ESCORE', 'TSCORE']) { // a gift per score level, lit once that score is reached this week (any difficulty)
+    const ids = Object.keys(SCORE_GOAL[g]).map(d => `${g.toLowerCase()}_${d}`), next = Object.keys(SCORE_GOAL[g]).find(d => !stats.got[`${g.toLowerCase()}_${d}`]);
+    const goal = d => `≥ ${SCORE_GOAL[g][d].toLocaleString(lang)}`;
+    html += row('ach got', '', t('groups')[g], next ? goal(next) : done(goal('hi')), gifts(ids.map(id => [ACH[id][1], stats.got[id]])));
   }
-  let group = '';
+  html += row(`trophy${stats.clearChest ? '' : ' shut'}`, '<canvas data-icon="chest"></canvas>', t('clearChest'),
+    stats.clearChest ? t('chestOpened') : '', `${bonusLit()}/${BONUS_ALL}`);
+  // the rest in one group; its counter: rows fully won (a two-level row counts once both are won)
+  const achRows = [...Object.values(TIERED), ...Object.keys(ACH).filter(id => !TIERED[ACH[id][0]] && !SCORE_GOAL[ACH[id][0]]).map(id => [id])];
+  html += `<p class="grp">${t('achTitle')} · ${achRows.filter(ids => ids.every(id => stats.got[id])).length}/${achRows.length}</p>`;
+  for (const g of ['COMBO', 'ENDLESS']) {
+    const ids = TIERED[g], k = ids.filter(id => stats.got[id]).length; // the next level's goal, or all done
+    html += row('ach got', '', t('groups')[g], k < ids.length ? t('ach_' + ids[k])[1] : done(t('ach_' + ids.at(-1))[1]), gifts(ids.map(id => [ACH[id][1], stats.got[id]])));
+  }
   for (const [id, [g, kind, prog]] of Object.entries(ACH)) {
     if (TIERED[g] || SCORE_GOAL[g]) continue;
-    if (g !== group) { html += `<p class="grp">${t('groups')[g]}</p>`; group = g; }
     const [name, how] = t('ach_' + id), got = stats.got[id], p = !got && prog?.();
     html += row(`ach${got ? ' got' : ''}`, '', name, how + (p ? ` · ${Math.min(p[0], p[1])}/${p[1]}` : ''), gifts([[kind, got]]));
   }
@@ -885,26 +970,17 @@ function drawTrophies() {
   $('trophyList').innerHTML = html;
   for (const c of $('trophyList').querySelectorAll('canvas[data-f]')) paintSprite(c, FRUITS[c.dataset.f].sprite);
   for (const c of $('trophyList').querySelectorAll('[data-icon="chest"]')) drawIcon(c, 'chest');
-  const won = Object.keys(ACH).filter(id => stats.got[id]).length; // old ids don't count
-  $('trophyCount').textContent = `${won} / ${Object.keys(ACH).length}`;
   $('rbNext').textContent = t('nextRainbow', RAINBOW_EVERY - stats.lines % RAINBOW_EVERY);
 }
 
-// Two taps within 3 s, so one stray tap can't wipe the scores.
-function resetScores() {
-  if (performance.now() - resetAt > 3000) { resetAt = performance.now(); $('resetTxt').textContent = t('resetAgain'); return; }
-  boards = Object.fromEntries(Object.keys(MODES).map(m => [m, { lo: [], med: [], hi: [] }]));
-  saveBoards(); drawBoard(); hud(); resetAt = -1e9;
-  $('resetTxt').textContent = t('resetDone');
-}
 
 function toMenu() {
   endTutorial();
-  for (const id of ['quit', 'rescue', 'prestart']) $(id).hidden = true;
+  for (const id of ['quit', 'rescue', 'prestart', 'count']) $(id).hidden = true;
   state = 'menu'; music.start('menu'); document.activeElement?.blur();
-  $('title').textContent = MENU_TITLE; $('msg').innerHTML = t('menuMsg');
+  $('title').textContent = MENU_TITLE; $('msg').hidden = true;
   drawBoard(); $('overlay').hidden = false; hud();
-  dailyGift(); checkBoards(); remind(false);
+  gameWins = []; drawWins(); remind(false);
 }
 
 // START: if you own a rainbow (or an ad can give one), ask whether to spend one on this game, then play.
@@ -918,8 +994,23 @@ function start() {
 function begin(useRainbow) {
   rainbowOn = useRainbow && rainbows > 0;
   if (rainbowOn) { rainbows--; saveRainbows(); } $('prestart').hidden = true; document.activeElement?.blur();
-  newGame();
-  sfx.start(); music.start();
+  newGame(); countdown();
+}
+
+// 3, 2, 1 over the well, a beep each second, then the fruit starts to fall.
+let countId = 0;
+function countdown() {
+  const id = ++countId; let n = 3;
+  state = 'count'; music.stop(); hud();
+  const step = () => {
+    if (id !== countId || (state !== 'count' && state !== 'paused')) return; // left the game meanwhile
+    if (state === 'paused') return setTimeout(step, 200); // waits while the pause menu is open
+    if (!n) { $('count').hidden = true; state = 'play'; sfx.start(); music.start(); return; }
+    $('count').textContent = n--; $('count').hidden = false; sfx.count();
+    $('count').classList.remove('pulse'); void $('count').offsetWidth; $('count').classList.add('pulse');
+    setTimeout(step, 1000);
+  };
+  step();
 }
 
 function muteLabels() {
@@ -937,8 +1028,7 @@ function applyLang() {
   for (const el of document.querySelectorAll('[data-t]')) el.innerHTML = t(el.dataset.t); // our own strings from lang.js
   for (const b of $('langs').children) b.setAttribute('aria-pressed', b.dataset.lang === lang);
   muteLabels(); drawBoard(); hud(); infoShown = '';
-  if (state === 'menu') $('msg').innerHTML = t('menuMsg');
-  $('setTitle').textContent = t(state === 'paused' && pausedFrom ? 'paused' : 'settings'); $('resetTxt').textContent = t('reset');
+  drawWins();
   if (!$('trophies').hidden) drawTrophies();
   if (tut) tutShow();
 }
@@ -963,7 +1053,7 @@ catch { setLang(pickLang(null, navigator.languages || [navigator.language])); }
 function fit() {
   const b = getComputedStyle(document.body), bars = parseFloat(b.paddingTop) + parseFloat(b.paddingBottom); // system bars
   const room = innerHeight - bars, pad = Math.max(PAD_MIN, room * PAD);
-  const s = Math.min(innerWidth / PW, (room - $('hud').offsetHeight - 12 - pad) / PH);
+  const s = Math.min(innerWidth / PW, (room - $('hud').offsetHeight - $('bar').offsetHeight - 12 - pad) / PH);
   scale = s; // fill the space; at phone pixel densities uneven pixel sizes don't show
   cv.style.width = PW * scale + 'px'; cv.style.height = PH * scale + 'px';
 }
@@ -976,13 +1066,20 @@ $('mvibe').addEventListener('click', () => mute('vibe'));
 $('gear').addEventListener('click', () => openSettings());
 $('trophy').addEventListener('click', () => openSettings('trophies'));
 $('pow').addEventListener('click', () => openSettings('powers'));
-$('powSm').addEventListener('click', () => openSettings('powers'));
+// The bar under the well: in play a tap readies a help (an empty one plays an ad, paused); after losing it's the rescue pick.
+for (const b of document.querySelectorAll('#bar .help-src')) b.addEventListener('click', async () => {
+  const tool = b.dataset.tool;
+  if (state === 'rescue') return pick({ currentTarget: b });
+  if (state !== 'play' || tut?.freeze) return;
+  if (helps[tool]) return useMidGame(tool);
+  pause(); await adHelp(tool); if (state === 'paused') resume();
+});
 $('setX').addEventListener('click', closeSettings);
 $('setGo').addEventListener('click', closeSettings);
-$('reset').addEventListener('click', resetScores);
+$('setMenu').addEventListener('click', () => { if (state === 'paused') { $('settings').hidden = true; $('quit').hidden = false; } }); // asks first: the score is lost
 $('tutBtn').addEventListener('click', () => { if (state === 'menu' || state === 'over') startTutorial(); });
-$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('power'); else if (tut.step === 'lose') tutStep('done'); else toMenu(); });
-$('tutSkip').addEventListener('click', () => { if (tut) toMenu(); });
+$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('power'); else if (tut.step === 'lose') tutStep('done'); else { toMenu(); begin(false); } }); // straight into a game, no rainbow question
+$('tutSkip').addEventListener('click', () => { if (tut) { toMenu(); begin(false); } });
 $('noShow').addEventListener('click', () => { try { localStorage.setItem('noHowto', '1'); } catch {} closeSettings(); });
 for (const b of document.querySelectorAll('#settings [data-view]')) b.addEventListener('click', () => show(b.dataset.view));
 for (const b of document.querySelectorAll('#settings .back')) b.addEventListener('click', back);
@@ -992,6 +1089,19 @@ for (const b of document.querySelectorAll('#powList .help-src')) b.addEventListe
   if (!helps[b.dataset.tool]) adHelp(b.dataset.tool);
   else if (state === 'paused' && pausedFrom === 'play') useMidGame(b.dataset.tool);
 });
+$('adRandom').addEventListener('click', () => { if (!inGame()) adHelp(); });
+// What the 💪 window gave: its icons (the words for screen readers).
+const powNote = r => {
+  if (r) {
+    const el = $('powNote');
+    el.replaceChildren(Object.assign(document.createElement('span'), { className: 'gotIcons' }), Object.assign(document.createElement('small'), { textContent: r.text }));
+    el.firstChild.append(...icons(r.got));
+    el.hidden = false; el.classList.remove('fresh'); void el.offsetWidth; el.classList.add('fresh'); sfx.prize(); // reflow restarts the animation
+  }
+  hud();
+};
+$('boxBtn').addEventListener('click', () => { if (!inGame() && boxes.length) powNote(openBox(boxes[0].id)); });
+$('giftBtn').addEventListener('click', () => { if (!inGame()) powNote(claimGift()); });
 $('rbGet').addEventListener('click', async () => {
   if (state !== 'ask' || rainbows || !rainbowAd()) return;
   if (await watchAd()) {
@@ -1008,11 +1118,12 @@ paintSprite($('rbIcon'), RAINBOW.sprite);
 $('rbYes').addEventListener('click', () => { if (state === 'ask') begin(true); });
 $('rbNo').addEventListener('click', () => { if (state === 'ask') begin(false); });
 $('rbX').addEventListener('click', () => { if (state === 'ask') toMenu(); });
-$('exit').addEventListener('click', askQuit);
+$('exit').addEventListener('click', () => openSettings());
 $('qGo').addEventListener('click', resume);
 $('qMenu').addEventListener('click', toMenu);
 App?.addListener('backButton', () => { // registering this replaces Android's default "back closes the app"
-  if (!$('settings').hidden) back();
+  if (!$('wins').hidden) closeWins();
+  else if (!$('settings').hidden) back();
   else if (state === 'paused') resume();
   else if (state === 'ask') toMenu();
   else if (state === 'menu' || state === 'over' || state === 'intro') App.exitApp();
@@ -1032,6 +1143,7 @@ addEventListener('pointerdown', e => {
 addEventListener('pointermove', e => {
   if (carry) { moveCarry(e); return; }
   if (!g0) return;
+  g0.lx = e.clientX; g0.ly = e.clientY;
   const dx = e.clientX - g0.x, dy = e.clientY - g0.y;
   if (!g0.axis && Math.hypot(dx, dy) > 12) g0.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
   if (g0.axis === 'x') slideTo(clampX(g0.px + Math.round(dx * W / cv.clientWidth), piece.s));

@@ -17,7 +17,50 @@
   #hud { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; max-width: 480px;
     padding: 6px 16px; box-sizing: border-box; }
   #hud small { color: #8a80a8; }
-  #score { display: inline-block; font-size: 22px; color: #fff; transform-origin: left center; }
+  #info { white-space: nowrap; } /* "⏱ 0:06 · 40 to go" on one line: a wrapped number reads as something else */
+  #score { display: inline-block; font-size: 30px; color: #f5cd28; transform-origin: left center;
+    text-shadow: 1px 1px 0 #f58c14, 2px 2px 0 #963c00; } /* the title's 3D look */
+  #score.rec::after { content: ' 👑'; font-size: 18px; text-shadow: none; } /* above this mode's record */
+  /* 3 MIN: time left; CLEAR 40: lines done */
+  #prog { display: block; width: 120px; max-width: 100%; height: 5px; margin-top: 3px; color: #72b754;
+    background: linear-gradient(currentColor, currentColor) no-repeat left / 0% 100%, #2a2540; }
+  #prog[hidden] { display: none; }
+  #msg[hidden], #wins[hidden], #powNote[hidden] { display: none; }
+  #modeInfo { margin: 6px 0 0; color: #8a80a8; font-size: 12px; max-width: 320px; } /* what the chosen mode is */
+  /* end of a game: what you won, each a box to open */
+  #wins { position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: #0d0b14b3; }
+  .winBox { position: relative; width: min(320px, 92vw); max-height: 90vh; overflow-y: auto; box-sizing: border-box; padding: 14px; text-align: center;
+    background: #1d1a28f7; border: 2px solid #fcbc3c; }
+  #winsTitle { margin: 0 0 10px; }
+  #winsOk { font: inherit; width: 100%; min-height: 48px; margin-top: 12px; cursor: pointer; color: #8a80a8; background: #1d1a28; border: 2px solid #3a3350; }
+  /* each reward a tile like the power-ups: a box to tap, then what was in it, in the same place and size */
+  #winList { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .win { font: inherit; font-size: 12px; color: #f4e9c8; background: #2a1a14; border: 2px solid #8a5a30; height: 112px; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; text-align: center; }
+  button.win { cursor: pointer; border-color: #fcbc3c; }
+  .win .ico { display: flex; align-items: center; gap: 3px; height: 42px; }
+  .win canvas { width: 39px; height: 42px; } .win .ico.many canvas { width: 26px; height: 28px; }
+  .win small { color: #fcbc3c; } .win.opened small { color: #72b754; }
+  .win.opened { animation: gotIn 0.4s ease-out; }
+  #settings .claim { font: inherit; min-height: 40px; padding: 0 10px; cursor: pointer; color: #0d0b14; background: #fcbc3c; border: 2px solid #fcbc3c; }
+  #boxBtn canvas, #powNote canvas { display: inline-block; width: 26px; height: 28px; vertical-align: middle; }
+  /* what a box or the daily gift gave: a little card that pops in */
+  #powNote { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 4px 0 8px; padding: 10px 8px;
+    background: #72b75418; border: 2px dashed #72b754; }
+  #powNote .gotIcons { display: flex; gap: 6px; }
+  #powNote canvas { width: 39px; height: 42px; }
+  #powNote small { font-size: 12px; line-height: 1.4; }
+  #powNote.fresh { animation: gotIn 0.4s ease-out; }
+  @keyframes gotIn { 0% { transform: scale(0.6); opacity: 0; } 70% { transform: scale(1.08); } }
+  #boxBtn canvas { margin-right: 6px; }
+  #aimNote.still { animation: none; } #aimNote[hidden] { display: none; }
+  #aimNote canvas { display: inline-block; width: 26px; height: 28px; image-rendering: pixelated; vertical-align: middle; margin-right: 6px; }
+  #aimNote small { display: block; color: #8a80a8; }
+  #pow { position: relative; }
+  #powBadge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 9px; background: #ce5239; color: #fff; font-size: 11px; line-height: 18px; } /* boxes and gift waiting */
+  #powBadge[hidden] { display: none; }
+  #powNote { color: #72b754; }
   #score.bump { animation: bump 0.35s ease-out; }
   @keyframes bump { 40% { transform: scale(1.35); color: #f5cd28; } }
   .pop { position: fixed; z-index: 2; pointer-events: none; white-space: nowrap; font-weight: bold;
@@ -36,16 +79,20 @@
   #next { width: 72px; height: 72px; }
   #mid { position: relative; }
   #mult { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 6px; /* beside the preview, not shifting it */
-    color: #f5cd28; font-size: 20px; min-width: 3ch; padding-bottom: 4px;
-    background: linear-gradient(currentColor, currentColor) no-repeat left bottom / 0% 3px; } /* bar = bonus time left */
+    color: #f5cd28; font-size: 28px; min-width: 3ch; padding-bottom: 6px;
+    background: linear-gradient(currentColor, currentColor) no-repeat left bottom / 0% 5px; } /* bar = bonus time left */
+  #mult.pulse { animation: pulse 0.4s ease-out; }
+  @keyframes pulse { 40% { transform: translateY(-50%) scale(1.5); } }
   #overlay { position: fixed; inset: 0; padding: 0 16px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 8px; background: #0d0b14cc; text-align: center; }
+    justify-content: safe center; overflow-y: auto; /* the end-of-game wins can make it taller than a small phone */ gap: 8px; background: #0d0b14cc; text-align: center; }
   #overlay[hidden] { display: none; }
   #pad { flex: 1; display: flex; align-items: center; justify-content: center; color: #4a4266; letter-spacing: 4px;
     font-size: clamp(14px, 4vw, 22px); }
-  .helps-hud { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; }
-  .helps-hud canvas { width: 13px; height: 14px; }
-  .helps-hud b { margin-right: 5px; }
+  /* power-up bar under the well, in a game: tap one, then tap the sand (the quake goes at once) */
+  #bar { display: flex; gap: 6px; width: 100%; max-width: 480px; padding: 6px 16px 0; box-sizing: border-box; }
+  #bar .help-src { flex: 1; flex-direction: row; gap: 6px; min-height: 52px; padding: 4px; font-size: 16px; cursor: pointer; }
+  #bar canvas { width: 26px; height: 28px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } /* name for screen readers */
   .help-src { font: inherit; font-size: 12px; color: #f4e9c8; background: #2a1a14; border: 2px solid #8a5a30; min-height: 64px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px;
     cursor: grab; touch-action: none; }
@@ -58,9 +105,9 @@
   #powList { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #settings #powList .help-src { font-size: 12px; color: #f4e9c8; background: #2a1a14; border-color: #8a5a30; min-height: 64px; cursor: default; }
   #settings #powList .help-src.adable { cursor: pointer; }
-  #powSm { font-size: 10px; padding: 0 3px; min-height: 18px; margin-left: 2px; }
+  #settings #adRandom { font: inherit; min-height: 48px; cursor: pointer; color: #0d0b14; background: #72b754; border-color: #72b754; } /* rewarded ad */
   .help-src canvas { width: 39px; height: 42px; }
-  #carry { position: fixed; width: 52px; height: 56px; transform: translate(-50%, -100%); pointer-events: none; z-index: 3; }
+  #carry { position: fixed; width: 52px; height: 56px; transform: translate(-50%, -50%); /* centred on the aim, like the circle and the knife's band */ pointer-events: none; z-index: 3; }
   #carry[hidden], #rescue[hidden] { display: none; }
   #rescue { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: min(340px, 92vw); box-sizing: border-box; padding: 12px; text-align: center; z-index: 2;
@@ -86,6 +133,7 @@
     background: #1d1a28f7; border: 2px solid #fcbc3c; }
   #settings .txt { text-align: left; font-size: 12px; font-weight: normal; line-height: 1.5; }
   #settings .txt canvas { width: 13px; height: 14px; display: inline-block; vertical-align: middle; }
+  #settings .ch { width: auto; height: auto; font-size: 22px; color: #f4e9c8; } /* a text glyph where the others have a pixel icon */
   #settings #setGo, #settings #tutBtn { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
   #trophyList { display: flex; flex-direction: column; gap: 8px; }
   .trophy { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 8px; text-align: left; font-size: 13px; }
@@ -100,6 +148,12 @@
   #tut { position: fixed; left: 50%; transform: translateX(-50%); z-index: 4; width: min(330px, 90vw); box-sizing: border-box;
     padding: 10px 12px; text-align: center; background: #1d1a28e8; border: 2px solid #fcbc3c; pointer-events: none; }
   #tut[hidden], #tut [hidden] { display: none; }
+  /* 3-2-1 before a game, over the middle of the well */
+  #count { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+    font-size: 96px; color: #f5cd28; text-shadow: 3px 3px 0 #f58c14, 6px 6px 0 #963c00; }
+  #count[hidden] { display: none; }
+  #count.pulse { animation: countIn 0.5s ease-out; }
+  @keyframes countIn { 0% { transform: translate(-50%, -50%) scale(2); opacity: 0; } 100% { transform: translate(-50%, -50%); } }
   #tut p { margin: 0 0 8px; font-size: 14px; line-height: 1.4; }
   #tut div { display: flex; gap: 8px; justify-content: center; }
   #tut button { pointer-events: auto; font: inherit; font-size: 12px; min-height: 40px; padding: 0 12px; cursor: pointer;
@@ -120,8 +174,11 @@
   #settings [aria-pressed="true"] { color: #f4e9c8; border-color: #72b754; }
   #settings .ico { display: inline-block; vertical-align: middle; width: 26px; height: 28px; margin-right: 10px; }
   #settings [aria-pressed="false"] .ico { filter: grayscale(1); opacity: 0.45; } /* sound or vibration switched off */
-  #gear, #trophy { font-size: 16px; padding: 2px 8px; }
-  #prestart #rbX, #settings #setX { position: absolute; top: 2px; right: 2px; width: 44px; min-height: 44px; flex: none; padding: 0;
+  /* top-right buttons: 40px squares, the biggest that fit 3 across beside the next-fruit preview on a 360px phone */
+  .btns { display: inline-flex; gap: 4px; margin-top: 4px; }
+  .btns .mute { width: 40px; height: 40px; padding: 0; font-size: 20px; color: #f4e9c8; }
+  .btns [hidden] { display: none; }
+  #prestart #rbX, #settings #setX, #winsX { color: #8a80a8; cursor: pointer; position: absolute; top: 2px; right: 2px; width: 44px; min-height: 44px; flex: none; padding: 0;
     font-size: 20px; background: none; border: none; }
   #modes { display: flex; gap: 8px; margin-top: 4px; }
   #modes button { font: inherit; font-size: 13px; min-width: 88px; min-height: 40px; color: #8a80a8; background: #1d1a28;
@@ -158,15 +215,12 @@
 </head>
 <body>
   <div id="hud">
-    <div><small data-t="score">SCORE</small><br><span id="score">0</span><br><small id="info">LV 1 · 0 lines</small>
-      <br><span class="helps-hud" title="power-ups left">
-        <canvas data-icon="choc"></canvas><b data-n="choc">3</b><canvas data-icon="knife"></canvas><b data-n="knife">3</b>
-        <canvas data-icon="blend"></canvas><b data-n="blend">3</b><canvas data-icon="quake"></canvas><b data-n="quake">3</b><button class="mute" id="powSm" aria-label="power-ups" hidden>💪</button>
-      </span></div>
+    <div><small data-t="score">SCORE</small><br><span id="score">0</span><br><small id="info">LV 1 · 0 lines</small><i id="prog" hidden></i></div>
     <div id="mid"><canvas id="next" width="36" height="36"></canvas><span id="mult"></span></div>
-    <div><small data-t="best">BEST</small><br><span id="best">0</span><br><button class="mute" id="pow" aria-label="power-ups">💪</button> <button class="mute" id="trophy" aria-label="achievements">🏆</button> <button class="mute" id="gear" aria-label="settings">⚙</button> <button class="mute" id="exit" aria-label="leave game" hidden>✕</button></div>
+    <div><small data-t="best">BEST</small><br><span id="best">0</span><br><span class="btns"><button class="mute" id="pow" aria-label="power-ups">💪<b id="powBadge" hidden></b></button><button class="mute" id="trophy" aria-label="achievements">🏆</button><button class="mute" id="gear" aria-label="settings">⚙</button><button class="mute" id="exit" aria-label="pause" hidden>⏸</button></span></div>
   </div>
   <canvas id="well"></canvas>
+  <div id="bar" style="visibility: hidden"><button class="help-src" data-tool="choc"><i class="ad">AD</i><canvas data-icon="choc"></canvas><b data-n="choc">3</b><span class="sr" data-t="choc"></span></button><button class="help-src" data-tool="knife"><i class="ad">AD</i><canvas data-icon="knife"></canvas><b data-n="knife">3</b><span class="sr" data-t="knife"></span></button><button class="help-src" data-tool="blend"><i class="ad">AD</i><canvas data-icon="blend"></canvas><b data-n="blend">3</b><span class="sr" data-t="blend"></span></button><button class="help-src" data-tool="quake"><i class="ad">AD</i><canvas data-icon="quake"></canvas><b data-n="quake">3</b><span class="sr" data-t="quake"></span></button></div>
   <div id="pad" data-t="drag">◀ drag ▶</div>
   <div id="rescue" hidden>
     <p data-t="lost">YOU LOST!<br>Drag a power-up onto the sand.<br>(For the quake, just tap it.)</p>
@@ -181,9 +235,10 @@
   <canvas id="carry" hidden></canvas>
   <div id="overlay">
     <h1 id="title">FRUIT SALAD</h1>
-    <p id="msg">drag ↔ to move<br>tap to rotate<br>swipe ↓ and hold to drop fast (+points)</p>
+    <p id="msg" hidden></p>
     <p class="lbl" data-t="mode">MODE</p>
     <div id="modes"><button data-m="endless" data-t="endless">ENDLESS</button><button data-m="time" data-t="time">3 MIN</button><button data-m="clear" data-t="clear">CLEAR 40</button></div>
+    <p id="modeInfo"></p>
     <p class="lbl" data-t="difficulty">DIFFICULTY</p>
     <div id="diff"><button data-d="lo" data-t="lo">EASY</button><button data-d="med" data-t="med">NORMAL</button><button data-d="hi" data-t="hi">HARD</button></div>
     <button id="go" data-t="start">▶ START</button>
@@ -196,25 +251,41 @@
     <p><span data-t="rbAsk">Use a RAINBOW FRUIT for this game?</span><br><small data-t="rbInfo">Its sand matches any colour. 5% of the fruits in this game will be rainbow fruits.</small><br><span data-t="rbHave">You have</span> <b id="rbN">3</b>.</p>
     <div><button id="rbNo" data-t="no">NO</button><button id="rbYes" data-t="yesUse">YES, USE ONE</button></div>
   </div>
+  <!-- end of a game: what you won, each a box to open; unopened ones wait in the 💪 window -->
+  <div id="wins" role="dialog" aria-labelledby="winsTitle" hidden><div class="winBox">
+    <button id="winsX" aria-label="close">✕</button>
+    <p id="winsTitle"></p><div id="winList"></div><button id="winsOk" data-t="cont">CONTINUE</button>
+  </div></div>
   <div id="quit" hidden>
     <p><span data-t="leave">LEAVE THIS GAME?</span><br><small data-t="notSaved">Your score won't be saved.</small></p>
     <div><button id="qMenu" data-t="mainMenu">MAIN MENU</button><button id="qGo" data-t="cont">CONTINUE</button></div>
   </div>
   <div id="settings" role="dialog" aria-label="settings" hidden>
     <button id="setX" aria-label="close settings">✕</button>
+    <!-- mid-game (⏸ or the app going to the background): only what you need to get back in or out -->
+    <div id="pauseMain" hidden>
+      <p data-t="paused">PAUSED</p>
+      <button id="setGo" data-t="contPlay">▶ CONTINUE</button>
+      <button id="setMenu" data-t="mainMenu">MAIN MENU</button>
+      <button data-view="setMain"><span class="ico ch">⚙</span><span data-t="settings">SETTINGS</span></button>
+    </div>
     <div id="setMain">
-      <p id="setTitle">SETTINGS</p>
-      <button id="setGo" hidden data-t="contPlay">▶ CONTINUE</button>
+      <p data-t="settings">SETTINGS</p>
       <button id="mmusic"><canvas class="ico" data-icon="music"></canvas><span>MUSIC: ON</span></button>
       <button id="msfx"><canvas class="ico" data-icon="speaker"></canvas><span>SOUND FX: ON</span></button>
       <button id="mvibe"><canvas class="ico" data-icon="vibe"></canvas><span>VIBRATION: ON</span></button>
       <p class="lbl" data-t="language">LANGUAGE</p>
       <div id="langs"></div>
+      <button data-view="about"><span class="ico ch">ℹ</span><span data-t="about">INFO</span></button>
+      <button class="back" data-t="back">BACK</button>
+    </div>
+    <div id="about" hidden>
+      <p data-t="about">INFO</p>
       <button data-view="welcome"><canvas class="ico" data-icon="joystick"></canvas><span data-t="howto">HOW TO PLAY</span></button>
       <button data-view="trophies"><canvas class="ico" data-icon="trophy"></canvas><span data-t="achievements">ACHIEVEMENTS</span></button>
       <button data-view="credits"><canvas class="ico" data-icon="heart"></canvas><span data-t="credits">CREDITS</span></button>
-      <button id="reset"><canvas class="ico" data-icon="trash"></canvas><span id="resetTxt">RESET SCORES</span></button>
       <button id="adPrivacy" hidden><canvas class="ico" data-icon="lock"></canvas><span data-t="adPrivacy">AD PRIVACY</span></button>
+      <button class="back" data-t="back">BACK</button>
     </div>
     <!-- How to play, short: at start-up and from Settings; the full text is one tap away -->
     <div id="welcome" hidden>
@@ -236,13 +307,10 @@
         <canvas data-icon="blend"></canvas> <span data-t="hBlend"></span><br>
         <canvas data-icon="quake"></canvas> <span data-t="hQuake"></span></p>
       <p class="txt" data-t="h5"></p>
-      <p class="txt" data-t="h6"></p>
-      <p class="txt"><canvas data-icon="chest"></canvas> <span data-t="h7"></span></p>
       <button data-view="welcome" data-t="back">BACK</button>
     </div>
     <div id="trophies" hidden>
-      <p><span data-t="achTitle">ACHIEVEMENTS</span> · <span id="trophyCount"></span></p>
-      <p class="txt" data-t="achInfo"></p>
+      <p data-t="achTitle">ACHIEVEMENTS</p>
       <div id="trophyList"></div>
       <p class="txt" id="rbNext"></p>
       <button class="back" data-t="back">BACK</button>
@@ -255,6 +323,10 @@
         <button class="help-src" data-tool="blend"><i class="ad">AD</i><canvas data-icon="blend"></canvas><span><span data-t="blend">BLENDER</span> ×<b data-n="blend">3</b></span></button>
         <button class="help-src" data-tool="quake"><i class="ad">AD</i><canvas data-icon="quake"></canvas><span><span data-t="quake">QUAKE</span> ×<b data-n="quake">3</b></span></button>
       </div>
+      <p id="powNote" hidden></p>
+      <button id="boxBtn" class="claim" hidden></button>
+      <button id="giftBtn" class="claim" hidden data-t="giftClaim"></button>
+      <button id="adRandom" hidden data-t="adRandom"></button>
       <button class="back" data-t="back">BACK</button>
     </div>
     <div id="credits" hidden>
@@ -268,8 +340,9 @@
       <button class="back" data-t="back">BACK</button>
     </div>
   </div>
+  <div id="count" hidden aria-live="assertive"></div>
   <div id="tut" hidden aria-live="polite"><p id="tutText"></p><div><button id="tutNext"></button><button id="tutSkip" data-t="tutSkip">SKIP TUTORIAL</button></div></div>
-  <div id="toasts" aria-live="polite"></div>
+  <div id="toasts" aria-live="polite"><div id="aimNote" class="toast still" hidden></div></div>
   <canvas id="intro" width="100" height="170" aria-label="Fruit Salad"></canvas>
   <script type="module" src="main.js"></script>
 </body>

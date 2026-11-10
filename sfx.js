@@ -49,6 +49,7 @@ export const sfx = {
     const f = 392 * 2 ** (SCALE[Math.min(Math.max(combo, 1), 10) - 1] / 12);
     [0, 4, 7, 12].forEach((n, i) => tone('square', f * 2 ** (n / 12), f * 2 ** (n / 12) * 1.01, 0.09, 0.08, i * 0.06));
   },
+  count: () => tone('square', 440, 440, 0.12, 0.09), // each second of the 3-2-1 before a game
   start: () => { tone('square', 523, 523, 0.08, 0.08); tone('square', 784, 784, 0.14, 0.08, 0.09); },
   gameOver: () => { tone('sawtooth', 440, 220, 0.35, 0.1); tone('sawtooth', 300, 55, 0.8, 0.1, 0.35); },
   boom: () => {
