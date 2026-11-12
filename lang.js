@@ -5,6 +5,7 @@ const nb = ' '; // French puts a non-breaking space before ! ? : and %
 
 const DICT = {
   en: {
+    nameAsk: 'YOUR NAME FOR THE SCOREBOARD', nameOk: 'OK', mine: 'MY SCORES', world: 'WORLD', offline: "Can't reach the scoreboard",
     score: 'SCORE', best: 'BEST', drag: '◀ drag ▶', cancel: '— tap here to cancel —',
     lost: 'YOU LOST!<br>Tap a power-up, then tap the sand.<br>(The quake works at once.)',
     choc: 'CHOCOLATE BOMB', knife: 'KNIFE', blend: 'BLENDER', quake: 'QUAKE', giveUp: 'GIVE UP',
@@ -62,12 +63,16 @@ const DICT = {
     tutNext: 'NEXT', tutPlay: 'PLAY', tutSkip: 'SKIP TUTORIAL', tutBtn: '▶ TUTORIAL',
     youGot: n => n === 1 ? 'CHALLENGE REWARD' : 'CHALLENGE REWARDS', openBox: 'OPEN', openBoxes: n => `OPEN A BOX (${n})`, giftClaim: '🎁 TAKE TODAY\'S GIFT',
     info_endless: 'Play as long as you can. It gets faster.', info_time: 'As many points as you can in 3 minutes.', info_clear: 'Clear 40 lines as fast as you can.',
+    classic: 'CLASSIC', relax: 'RELAX', info_relax: 'No rush: drag a fruit from the bottom up into the well and let go. Tap a fruit to turn it.',
+    tutRRotate: `Relax mode! Your next fruits wait at the bottom. Tap one to rotate it.`,
+    tutRDrop: `Now drag it up over the arrow and let go. While it falls you can't move it, but a tap on the screen turns it.`, tutRDone: `That's it! Take your time and have fun.`,
     powers: 'POWER-UPS', adRandom: '📺 WATCH AN AD: +1 RANDOM POWER-UP', start: '▶ START',
     adPrivacy: 'AD PRIVACY', adFail: 'No ad is available right now. Try again later.',
     tAd: prize => `📺 +1 ${prize}`,
   },
 
   el: {
+    nameAsk: 'ΤΟ ΟΝΟΜΑ ΣΟΥ ΓΙΑ ΤΗΝ ΚΑΤΑΤΑΞΗ', nameOk: 'OK', mine: 'ΤΑ ΣΚΟΡ ΜΟΥ', world: 'ΚΟΣΜΟΣ', offline: 'Η κατάταξη δεν είναι διαθέσιμη',
     score: 'ΣΚΟΡ', best: 'ΡΕΚΟΡ', drag: '◀ σύρε ▶', cancel: '— πάτα εδώ για ακύρωση —',
     lost: 'ΕΧΑΣΕΣ!<br>Πάτα μια βοήθεια και μετά πάτα πάνω στην άμμο.<br>(Ο σεισμός δρα αμέσως.)',
     choc: 'ΒΟΜΒΑ ΣΟΚΟΛΑΤΑΣ', knife: 'ΜΑΧΑΙΡΙ', blend: 'ΜΠΛΕΝΤΕΡ', quake: 'ΣΕΙΣΜΟΣ', giveUp: 'ΤΑ ΠΑΡΑΤΑΩ',
@@ -127,11 +132,15 @@ const DICT = {
     tutNext: 'ΕΠΟΜΕΝΟ', tutPlay: 'ΠΑΙΞΕ', tutSkip: 'ΠΑΡΑΛΕΙΨΗ ΟΔΗΓΟΥ', tutBtn: '▶ ΟΔΗΓΟΣ ΠΑΙΧΝΙΔΙΟΥ',
     youGot: n => n === 1 ? 'ΑΝΤΑΜΟΙΒΗ ΠΡΟΚΛΗΣΗΣ' : 'ΑΝΤΑΜΟΙΒΕΣ ΠΡΟΚΛΗΣΕΩΝ', openBox: 'ΑΝΟΙΞΕ', openBoxes: n => `ΑΝΟΙΞΕ ΚΟΥΤΙ (${n})`, giftClaim: '🎁 ΠΑΡΕ ΤΟ ΔΩΡΟ ΤΗΣ ΗΜΕΡΑΣ',
     info_endless: 'Παίξε όσο αντέχεις. Η ταχύτητα ανεβαίνει.', info_time: 'Όσους περισσότερους πόντους μπορείς σε 3 λεπτά.', info_clear: 'Καθάρισε 40 γραμμές όσο πιο γρήγορα μπορείς.',
+    classic: 'ΚΛΑΣΙΚΟ', relax: 'RELAX', info_relax: 'Χωρίς βιασύνη: σύρε ένα φρούτο από κάτω προς τα πάνω και άφησέ το. Πάτα ένα φρούτο για να το γυρίσεις.',
+    tutRRotate: `Relax! Τα επόμενα φρούτα σου περιμένουν κάτω. Πάτα ένα για να το γυρίσεις.`,
+    tutRDrop: `Τώρα σύρε το πάνω από το βελάκι και άφησέ το. Όσο πέφτει δεν το κουνάς, αλλά ένα πάτημα στην οθόνη το γυρίζει.`, tutRDone: `Αυτό ήταν! Πάρε τον χρόνο σου και καλή διασκέδαση.`,
     powers: 'ΔΥΝΑΜΕΙΣ', adRandom: '📺 ΔΕΣ ΜΙΑ ΔΙΑΦΗΜΙΣΗ: +1 ΤΥΧΑΙΑ ΒΟΗΘΕΙΑ', start: '▶ ΞΕΚΙΝΑ',
     adPrivacy: 'ΑΠΟΡΡΗΤΟ ΔΙΑΦΗΜΙΣΕΩΝ', adFail: 'Δεν υπάρχει διαφήμιση αυτή τη στιγμή. Δοκίμασε αργότερα.',
   },
 
   es: {
+    nameAsk: 'TU NOMBRE PARA LA CLASIFICACIÓN', nameOk: 'OK', mine: 'MIS PUNTUACIONES', world: 'MUNDO', offline: 'No se puede cargar la clasificación',
     score: 'PUNTOS', best: 'RÉCORD', drag: '◀ arrastra ▶', cancel: '— toca aquí para cancelar —',
     lost: '¡HAS PERDIDO!<br>Toca un potenciador y luego toca la arena.<br>(El terremoto actúa al momento).',
     choc: 'BOMBA DE CHOCOLATE', knife: 'CUCHILLO', blend: 'BATIDORA', quake: 'TERREMOTO', giveUp: 'RENDIRSE',
@@ -190,11 +199,15 @@ const DICT = {
     tutNext: 'SIGUIENTE', tutPlay: 'JUGAR', tutSkip: 'SALTAR TUTORIAL', tutBtn: '▶ TUTORIAL',
     youGot: n => n === 1 ? 'RECOMPENSA DE DESAFÍO' : 'RECOMPENSAS DE DESAFÍOS', openBox: 'ABRIR', openBoxes: n => `ABRIR UNA CAJA (${n})`, giftClaim: '🎁 COGE EL REGALO DE HOY',
     info_endless: 'Juega todo lo que aguantes. Cada vez va más rápido.', info_time: 'Todos los puntos que puedas en 3 minutos.', info_clear: 'Limpia 40 líneas lo más rápido que puedas.',
+    classic: 'CLÁSICO', relax: 'RELAX', info_relax: 'Sin prisa: arrastra una fruta desde abajo hasta arriba y suéltala. Toca una fruta para girarla.',
+    tutRRotate: `¡Modo relax! Tus próximas frutas esperan abajo. Toca una para girarla.`,
+    tutRDrop: `Ahora arrástrala encima de la flecha y suéltala. Mientras cae no puedes moverla, pero un toque en la pantalla la gira.`, tutRDone: `¡Eso es todo! Tómate tu tiempo y diviértete.`,
     powers: 'POTENCIADORES', adRandom: '📺 VER UN ANUNCIO: +1 POTENCIADOR AL AZAR', start: '▶ JUGAR',
     adPrivacy: 'PRIVACIDAD DE ANUNCIOS', adFail: 'Ahora no hay anuncios disponibles. Inténtalo más tarde.',
   },
 
   pt: {
+    nameAsk: 'SEU NOME PARA O RANKING', nameOk: 'OK', mine: 'MINHAS PONTUAÇÕES', world: 'MUNDO', offline: 'Não foi possível carregar o ranking',
     score: 'PONTOS', best: 'RECORDE', drag: '◀ arraste ▶', cancel: '— toque aqui para cancelar —',
     lost: 'VOCÊ PERDEU!<br>Toque em um power-up e depois na areia.<br>(O terremoto age na hora.)',
     choc: 'BOMBA DE CHOCOLATE', knife: 'FACA', blend: 'LIQUIDIFICADOR', quake: 'TERREMOTO', giveUp: 'DESISTIR',
@@ -253,11 +266,15 @@ const DICT = {
     tutNext: 'PRÓXIMO', tutPlay: 'JOGAR', tutSkip: 'PULAR TUTORIAL', tutBtn: '▶ TUTORIAL',
     youGot: n => n === 1 ? 'RECOMPENSA DE DESAFIO' : 'RECOMPENSAS DE DESAFIOS', openBox: 'ABRIR', openBoxes: n => `ABRIR UMA CAIXA (${n})`, giftClaim: '🎁 PEGUE O PRESENTE DE HOJE',
     info_endless: 'Jogue o quanto aguentar. Fica cada vez mais rápido.', info_time: 'O máximo de pontos que puder em 3 minutos.', info_clear: 'Limpe 40 linhas o mais rápido que puder.',
+    classic: 'CLÁSSICO', relax: 'RELAX', info_relax: 'Sem pressa: arraste uma fruta de baixo para cima e solte. Toque numa fruta para girá-la.',
+    tutRRotate: `Modo relax! Suas próximas frutas esperam embaixo. Toque numa para girá-la.`,
+    tutRDrop: `Agora arraste-a até a seta e solte. Enquanto ela cai, não dá para movê-la, mas um toque na tela a gira.`, tutRDone: `É isso! Vá com calma e divirta-se.`,
     powers: 'POWER-UPS', adRandom: '📺 VER UM ANÚNCIO: +1 POWER-UP ALEATÓRIO', start: '▶ JOGAR',
     adPrivacy: 'PRIVACIDADE DOS ANÚNCIOS', adFail: 'Nenhum anúncio disponível agora. Tente mais tarde.',
   },
 
   fr: {
+    nameAsk: 'TON NOM POUR LE CLASSEMENT', nameOk: 'OK', mine: 'MES SCORES', world: 'MONDE', offline: 'Classement indisponible',
     score: 'SCORE', best: 'RECORD', drag: '◀ glisse ▶', cancel: '— touche ici pour annuler —',
     lost: `PERDU${nb}!<br>Touche un atout, puis touche le sable.<br>(Le séisme agit tout de suite.)`,
     choc: 'BOMBE AU CHOCOLAT', knife: 'COUTEAU', blend: 'MIXEUR', quake: 'SÉISME', giveUp: 'ABANDONNER',
@@ -317,11 +334,15 @@ const DICT = {
     tutNext: 'SUIVANT', tutPlay: 'JOUER', tutSkip: 'PASSER LE TUTORIEL', tutBtn: '▶ TUTORIEL',
     youGot: n => n === 1 ? 'RÉCOMPENSE DE DÉFI' : 'RÉCOMPENSES DE DÉFIS', openBox: 'OUVRIR', openBoxes: n => `OUVRIR UNE BOÎTE (${n})`, giftClaim: `🎁 PRENDS LE CADEAU DU JOUR`,
     info_endless: `Joue aussi longtemps que possible. Ça accélère.`, info_time: `Le plus de points possible en 3 minutes.`, info_clear: `Efface 40 lignes le plus vite possible.`,
+    classic: 'CLASSIQUE', relax: 'RELAX', info_relax: `Sans stress${nb}: fais glisser un fruit du bas vers le haut et lâche-le. Touche un fruit pour le tourner.`,
+    tutRRotate: `Mode relax${nb}! Tes prochains fruits attendent en bas. Touches-en un pour le tourner.`,
+    tutRDrop: `Maintenant, fais-le glisser au-dessus de la flèche et lâche-le. Pendant sa chute, tu ne peux pas le bouger, mais une touche sur l'écran le tourne.`, tutRDone: `C'est tout${nb}! Prends ton temps et amuse-toi bien.`,
     powers: 'ATOUTS', adRandom: `📺 VOIR UNE PUB${nb}: +1 ATOUT AU HASARD`, start: '▶ JOUER',
     adPrivacy: 'CONFIDENTIALITÉ DES PUBS', adFail: 'Aucune pub disponible pour le moment. Réessaie plus tard.',
   },
 
   de: {
+    nameAsk: 'DEIN NAME FÜR DIE BESTENLISTE', nameOk: 'OK', mine: 'MEINE PUNKTE', world: 'WELT', offline: 'Bestenliste nicht erreichbar',
     score: 'PUNKTE', best: 'REKORD', drag: '◀ ziehen ▶', cancel: '— hier tippen zum Abbrechen —',
     lost: 'VERLOREN!<br>Tippe auf ein Power-up, dann auf den Sand.<br>(Das Erdbeben wirkt sofort.)',
     choc: 'SCHOKOBOMBE', knife: 'MESSER', blend: 'MIXER', quake: 'ERDBEBEN', giveUp: 'AUFGEBEN',
@@ -380,6 +401,9 @@ const DICT = {
     tutNext: 'WEITER', tutPlay: 'SPIELEN', tutSkip: 'TUTORIAL ÜBERSPRINGEN', tutBtn: '▶ TUTORIAL',
     youGot: n => n === 1 ? 'BELOHNUNG FÜR EINE HERAUSFORDERUNG' : 'BELOHNUNGEN FÜR HERAUSFORDERUNGEN', openBox: 'ÖFFNEN', openBoxes: n => `KISTE ÖFFNEN (${n})`, giftClaim: '🎁 HOL DIR DAS GESCHENK DES TAGES',
     info_endless: 'Spiel, so lange du kannst. Es wird immer schneller.', info_time: 'So viele Punkte wie möglich in 3 Minuten.', info_clear: 'Räum 40 Linien so schnell wie möglich ab.',
+    classic: 'KLASSISCH', relax: 'RELAX', info_relax: 'Ganz ohne Eile: Zieh eine Frucht von unten nach oben und lass sie los. Tipp auf eine Frucht, um sie zu drehen.',
+    tutRRotate: `Relax-Modus! Deine nächsten Früchte warten unten. Tipp auf eine, um sie zu drehen.`,
+    tutRDrop: `Jetzt zieh sie über den Pfeil und lass los. Während sie fällt, kannst du sie nicht bewegen, aber ein Tipp auf den Bildschirm dreht sie.`, tutRDone: `Das war's! Lass dir Zeit und viel Spaß.`,
     powers: 'POWER-UPS', adRandom: '📺 WERBUNG ANSEHEN: +1 ZUFÄLLIGES POWER-UP', start: '▶ START',
     adPrivacy: 'WERBE-DATENSCHUTZ', adFail: 'Gerade ist keine Werbung verfügbar. Versuch es später noch einmal.',
   },

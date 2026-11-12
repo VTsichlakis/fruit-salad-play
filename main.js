@@ -5,6 +5,7 @@ import { sfx, music, isMuted, toggleMute, vibrate, hush } from './sfx.js';
 import { planReminder } from './remind.js';
 import { adReady, adShowing, needsAdPrivacy, initAds, showAd, adPrivacyOptions } from './ads.js';
 import { intro } from './intro.js';
+import { postScore, topScores } from './online.js';
 import { t, setLang, lang, LANGS, pickLang, flagPx, FLAG_SIZE } from './lang.js';
 
 const $ = id => document.getElementById(id);
@@ -20,7 +21,9 @@ const SAND_RATE = 16;  // sand passes per second at level 0, Med
 const DIFF = { lo: 0.69, med: 1.15, hi: 1.61 }; // start speed per difficulty: the original's 0.6/1/1.4, made 15% harder
 // Modes, as in the original: Endless speeds up with lines; 3 MIN is a fixed-speed race for score;
 // Clear 40 is a race against the clock to clear 40 lines, above a stone floor that grows with difficulty.
-const MODES = { endless: 'ENDLESS', time: '3 MIN', clear: 'CLEAR 40' };
+// Relax (its own menu tab): fruits are dragged up from three slots under the well and dropped, no control once they fall,
+// at Hard's starting speed throughout; its scores are kept under 'hi'.
+const MODES = { endless: 'ENDLESS', time: '3 MIN', clear: 'CLEAR 40', relax: 'RELAX' };
 const TIME_LIMIT = 180;
 const CLEAR_LINES = 40;
 const STONE_ROWS = { lo: 0, med: 22, hi: 36 }; // the original's 0/24/40 of 144 rows, scaled to our 131
@@ -30,7 +33,7 @@ const COMBO_TIME = 6;  // seconds a bonus lasts after each clear
 const SPAWN_Y = 2;     // rows 0-1 hold the countdown bar
 const PAD = 0.14;      // share of the screen height kept free under the well for the dragging finger
 const PAD_MIN = 64;    // ...but never less than this many css px
-const BOARD = 5;       // scores kept per difficulty
+const BOARD = 100;     // scores kept per mode and difficulty
 const HELPS = { choc: 3, knife: 3, blend: 3, quake: 3 }; // helps you own at first; like rainbows they carry over between games
 const BLAST_R = 18;    // chocolate blast radius in grains
 const KNIFE_H = 5;     // knife cuts this many rows above and below where it's dropped
@@ -151,6 +154,9 @@ let keepPiece = false; // a help used mid-game (from the 💪 window): the falli
 let stats = loadStats(), usedHelp = false, gameFruits = new Set(), boxes = loadBoxes(), gameWins = []; // per game: a help used, fruits cleared
 checkWeek();
 let quakeT = 0, rainbowOn = false, rainbows = loadRainbows(), mode = loadMode(), playT = 0, infoShown = '', progShown = null;
+if (mode === 'relax') diff = 'hi'; // not saved: the CLASSIC tab gets the chosen difficulty back
+// relax: the three fruits under the well; the one being dragged { i, x, y, moved } (shown as `piece`); the dropped ones
+let slots = [], drag = null, falling = [];
 const carryEl = $('carry');
 const MENU_TITLE = $('title').textContent; // game over rewrites it
 const App = window.Capacitor?.Plugins?.App; // only inside the Android app (@capacitor/app)
@@ -212,11 +218,11 @@ function loadBoards() {
   const empty = () => ({ lo: [], med: [], hi: [] }), ok = b => b && Object.keys(DIFF).every(d => Array.isArray(b[d]));
   try {
     const b = JSON.parse(localStorage.getItem('boards2'));
-    if (b && Object.keys(MODES).every(m => ok(b[m]))) return b;
+    if (b && ['endless', 'time', 'clear'].every(m => ok(b[m]))) { if (!ok(b.relax)) b.relax = empty(); return b; } // saves from before Relax
   } catch {}
   let endless = empty();
   try { const old = JSON.parse(localStorage.getItem('boards')); if (ok(old)) endless = old; } catch {} // from before modes: all Endless
-  return { endless, time: empty(), clear: empty() };
+  return { endless, time: empty(), clear: empty(), relax: empty() };
 }
 function saveBoards() { try { localStorage.setItem('boards2', JSON.stringify(boards)); } catch {} }
 const clock = (s, tenths) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}${tenths ? '.' + Math.floor(s * 10) % 10 : ''}`;
@@ -225,7 +231,7 @@ const bestOf = (m, d) => boards[m][d].length ? fmt(m, Number(boards[m][d][0])) :
 
 // A random fruit, already turned the way it will fall (0-3 quarter turns), so the preview shows it as it comes.
 function rndFruit() {
-  if (tut?.step === 'drop') return FRUITS[tut.fruit].sprite; // the floor's fruit, so a clear can come
+  if (tut) return FRUITS[tut.fruit].sprite; // the tutorial: one fruit, the floor's, so a clear can come
   let s = rainbowOn && Math.random() < RAINBOW_CHANCE ? RAINBOW.sprite : FRUITS[Math.floor(Math.random() * FRUITS.length)].sprite;
   for (let r = Math.floor(Math.random() * 4); r > 0; r--) s = rot(s);
   return s;
@@ -240,19 +246,24 @@ const fireLevel = () => combo.mult >= 7 ? 3 : combo.mult >= 5 ? 2 : combo.mult >
 // sand with a gap waits at the bottom (it takes the colour of the fruit to drop), and each step waits for the player to do what it says.
 // Nothing in it counts: no stats, scores or achievements.
 const TUT_GAP = [38, 62]; // columns of the gap in the tutorial floor
-const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', power: 'tutPower', lose: 'tutLose', done: 'tutDone' };
+// Relax has its own, shorter one (the first START in Relax, and ? on the Relax tab): rrotate → rdrop → cleared → done;
+// a fruit dropped before turning one also moves it on.
+const TUT_TEXT = { move: 'tutMove', rotate: 'tutRotate', drop: 'tutDrop', cleared: 'tutCleared', power: 'tutPower', lose: 'tutLose', done: 'tutDone',
+  rrotate: 'tutRRotate', rdrop: 'tutRDrop' };
 const ARROW = ['..###..', '..###..', '..###..', '#######', '.#####.', '..###..', '...#...'];
 let tut = null; // while it runs: { step, x0, landed, freeze, saved: { mode, diff } }
-const tutSeen = () => { try { return localStorage.getItem('tutDone') === '1'; } catch { return false; } };
-function startTutorial() {
+const tutSeen = (key = 'tutDone') => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+function startTutorial(relax = false) {
   $('settings').hidden = true; $('overlay').hidden = true;
-  tut = { step: 'move', saved: { mode, diff } };
+  // one random fruit for the whole tutorial, and the floor that fruit's sand
+  tut ={ step: relax ? 'rrotate' : 'move', relax, fruit: Math.floor(Math.random() * FRUITS.length), saved: { mode, diff } };
   helps = { ...HELPS }; // the tutorial lends a full set (its helps are free), even to a player who has none
-  mode = 'endless'; diff = 'lo'; rainbowOn = false;
+  mode = relax ? 'relax' : 'endless'; diff = relax ? 'hi' : 'lo'; rainbowOn = false;
   newGame(true);
   for (let y = H - 4; y < H; y++) for (let x = 0; x < W; x++)
     if (x < TUT_GAP[0] || x >= TUT_GAP[1]) grid[y * W + x] = 4 + 1 + ((x * 7 + y * 3) % 5 === 0); // banana sand, a few light grains
-  tut.x0 = piece.x;
+  tutFloor(FRUITS[tut.fruit].sprite);
+  tut.x0 = piece?.x; // relax has no fruit in the well yet
   sfx.start(); music.start();
   tutShow();
 }
@@ -260,14 +271,14 @@ function tutStep(step) {
   tut.step = step; tut.freeze = step === 'cleared' || step === 'lose' || step === 'done'; // reading time: the game waits
   if (step === 'cleared') sfx.prize();
   if (step === 'power') tutFill();
-  if (step === 'drop') { // the floor turns into this fruit's sand, and the next ones are the same fruit
-    tut.fruit = (piece.s.px.find(Boolean) >> 2) - 1;
-    for (let i = (H - 4) * W; i < W * H; i++) if (grid[i]) grid[i] = (tut.fruit + 1) * 4 + (grid[i] & 3);
-    next = rndFruit(); drawNext();
-  }
   tutShow();
 }
-function tutShow(key = TUT_TEXT[tut.step]) {
+// The floor turns into this fruit's sand, so dropping it into the gap clears.
+function tutFloor(s) {
+  tut.fruit = (s.px.find(Boolean) >> 2) - 1;
+  for (let i = (H - 4) * W; i < W * H; i++) if (grid[i]) grid[i] = (tut.fruit + 1) * 4 + (grid[i] & 3);
+}
+function tutShow(key = tut.relax && tut.step === 'done' ? 'tutRDone' : TUT_TEXT[tut.step]) {
   $('tutText').textContent = t(key);
   $('tutNext').hidden = !tut.freeze; $('tutNext').textContent = t(tut.step === 'done' ? 'tutPlay' : 'tutNext');
   $('tutSkip').hidden = tut.step === 'done';
@@ -283,12 +294,13 @@ function tutFill() {
 // Each frame: the player moved the fruit far enough; or a fruit landed and no clear came of it.
 function tutTick() {
   if (tut.step === 'move' && Math.abs(piece.x - tut.x0) >= 10) tutStep('rotate');
-  if (tut.step === 'drop' && tut.landed && playT - tut.landed > 3 && !flash) { tut.landed = 0; tutShow('tutAgain'); }
+  if ((tut.step === 'drop' || tut.step === 'rdrop') && tut.landed && playT - tut.landed > 3 && !flash) { tut.landed = 0; tutShow('tutAgain'); }
 }
 function endTutorial() {
   if (!tut) return;
+  const key = tut.relax ? 'tutRelax' : 'tutDone';
   ({ mode, diff } = tut.saved); tut = null; $('tut').hidden = true; helps = loadHelps();
-  try { localStorage.setItem('tutDone', '1'); } catch {}
+  try { localStorage.setItem(key, '1'); } catch {}
 }
 
 function newGame(tutorial = false) {
@@ -297,7 +309,8 @@ function newGame(tutorial = false) {
   usedHelp = false; gameFruits = new Set(); gameWins = []; $('wins').hidden = true; // Enter can start a game past it
   if (!tutorial) countGame();
   if (mode === 'clear') stoneFloor(grid, STONE_ROWS[diff]);
-  next = rndFruit(); spawn(); state = 'play'; $('overlay').hidden = true; hud();
+  next = rndFruit(); slots = [rndFruit(), rndFruit(), rndFruit()]; drag = null; falling = []; drawSlots();
+  spawn(); state = 'play'; $('overlay').hidden = true; hud();
 }
 
 // A game started: games played, days in a row, and the chests that come with them.
@@ -315,6 +328,7 @@ function countGame() {
 }
 
 function spawn() {
+  if (mode === 'relax') { piece = null; return; } // the next fruit is the one the player drags up from a slot
   const s = next;
   next = rndFruit();
   piece = { s, x: (W - s.w) >> 1, y: SPAWN_Y, falling: false };
@@ -349,7 +363,7 @@ function lose() {
   if (tut) return toMenu(); // the tutorial's well never fills, but just in case
   keepPiece = false; // this fruit has landed: a fresh one comes after the rescue
   if (!Object.values(helps).some(n => n > 0) && !adReady()) return gameOver('lost'); // none left: an ad can still give one
-  state = 'rescue'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false;
+  state = 'rescue'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false; cancelDrag();
   $('rescue').hidden = false; hud();
   sfx.warn();
 }
@@ -466,10 +480,12 @@ function gameOver(reason) {
   if (timed ? reason === 'cleared' : score > 0) {
     b.push(value); b.sort((p, q) => timed ? p - q : q - p); b.length = Math.min(b.length, BOARD);
     rank = b.indexOf(value); saveBoards();
+    const m = mode, d = diff; // the world list shows the new score once it's in
+    postScore(m, d, loadName(), value).then(() => { if (state === 'over' && boardView === 'world' && m === mode && d === diff) drawBoard(); }, () => {});
   }
   $('title').textContent = t(reason === 'cleared' ? 'cleared' : reason === 'time' ? 'timesUp' : 'gameOver');
   const what = !timed ? t('scoreIs', score) : reason === 'cleared' ? t('timeIs', clock(playT, true)) : t('linesToGo', CLEAR_LINES - lines);
-  $('msg').textContent = rank >= 0 ? `${what} · ${t('rankOn', rank + 1, t(diff))}` : what; $('msg').hidden = false;
+  $('msg').textContent = rank >= 0 ? `${what} · ${t('rankOn', rank + 1, t(mode === 'relax' ? 'relax' : diff))}` : what; $('msg').hidden = false;
   drawBoard(rank);
   $('overlay').hidden = false; hud();
   music.stop(); music.speed(1); sfx.gameOver();
@@ -631,12 +647,12 @@ function updateFire(dt, fromPiece = true) {
   fire = fire.filter(p => p.t > 0);
   const f = FIRE[fireLevel()];
   if (!f || !fromPiece) return;
-  for (let k = 0; k < f.n; k++) {
-    const cx = Math.floor(Math.random() * piece.s.w);
+  for (const pc of mode === 'relax' ? falling : [piece]) for (let k = 0; k < f.n; k++) {
+    const cx = Math.floor(Math.random() * pc.s.w);
     let cy = 0;
-    while (cy < piece.s.h && !piece.s.px[cy * piece.s.w + cx]) cy++;
-    if (cy === piece.s.h) continue; // empty column of the sprite
-    fire.push({ x: piece.x + cx, y: piece.y + cy, vx: (Math.random() - 0.5) * 12,
+    while (cy < pc.s.h && !pc.s.px[cy * pc.s.w + cx]) cy++;
+    if (cy === pc.s.h) continue; // empty column of the sprite
+    fire.push({ x: pc.x + cx, y: pc.y + cy, vx: (Math.random() - 0.5) * 12,
       vy: -f.up * (0.6 + Math.random() * 0.6), t: f.life, life: f.life, size: f.size });
   }
 }
@@ -655,7 +671,7 @@ function tick(dt) {
     for (const p of flash) grid[p] = 0;
     const pts = combo.clear(flash.length);
     score += pts; lines++; popScore(flash, pts, cls); if (!tut) countLine(fruits, withRainbow, flash.bridge); flash = null; hud(); bump();
-    if (tut?.step === 'drop') tutStep('cleared');
+    if (tut?.step === 'drop' || tut?.step === 'rdrop') tutStep('cleared');
     sfx.clear(combo.mult);
     if (mode === 'clear' && lines >= CLEAR_LINES) return gameOver('cleared');
   }
@@ -665,6 +681,7 @@ function tick(dt) {
     const c = findClear(grid);
     if (c.length) { flash = c; flashT = 0.35; flashMask = new Uint8Array(W * H); for (const p of c) flashMask[p] = 1; return; }
   }
+  if (mode === 'relax') return relaxFall(dt);
   const dir = keys.right - keys.left, fast = keys.down || touchFast;
   if (dir) slideTo(clampX(piece.x + 2 * dir, piece.s)); // 2 grains per frame, as in the original
   if (tut) tutTick();
@@ -689,6 +706,20 @@ function tick(dt) {
   }
 }
 
+// Relax: every dropped fruit falls at the same steady speed, with no control, until it lands.
+function relaxFall(dt) {
+  if (tut) tutTick();
+  if (!falling.length) { fallAcc = 0; return; }
+  fallAcc += dt * FALL_SPEED * speed();
+  for (; fallAcc >= 1; fallAcc--) for (const p of [...falling]) {
+    if (!collides(grid, p.s, p.x, p.y + 1)) { p.y++; continue; }
+    falling.splice(falling.indexOf(p), 1); stamp(grid, p.s, p.x, p.y); hud();
+    if (tut) tut.landed = playT;
+    sfx.land(); shake = 3;
+    if (aboveLine()) return lose();
+  }
+}
+
 function put(x, y, c, a = 1) {
   const i = (y * PW + x) * 4;
   buf[i] += (c[0] - buf[i]) * a; buf[i + 1] += (c[1] - buf[i + 1]) * a; buf[i + 2] += (c[2] - buf[i + 2]) * a;
@@ -709,7 +740,7 @@ function render() {
     buf[o] = c[0]; buf[o + 1] = c[1]; buf[o + 2] = c[2]; buf[o + 3] = 255;
   }
   if (piece && (state === 'play' || state === 'count' || state === 'aim' || keepPiece)) {
-    if (!piece.falling) {
+    if (!piece.falling && mode !== 'relax') {
       const f = holdLeft / holdTime, bar = [255, 255 * f, 255 * f];
       for (let x = 0; x < PW * f; x++) { put(x, 0, bar); put(x, 1, bar); }
     }
@@ -718,6 +749,7 @@ function render() {
     drawSprite(piece.s, piece.x, gy, 0.3); // ghost: where it lands from here
     drawSprite(piece.s, piece.x, piece.y, 1);
   }
+  if (inGame()) for (const p of falling) drawSprite(p.s, p.x, p.y, 1);
   for (const p of fire) {
     const a = p.t / p.life, c = p.c || FLAME[a > 0.8 ? 0 : a > 0.45 ? 1 : 2];
     for (let dy = 0; dy < p.size; dy++) for (let dx = 0; dx < p.size; dx++) {
@@ -726,7 +758,7 @@ function render() {
     }
   }
   const tick2 = (performance.now() / 300 | 0) & 1; // tutorial blink, also while its game waits
-  if (tut?.step === 'drop' && tick2) // an arrow over the gap in the floor
+  if ((tut?.step === 'drop' || tut?.step === 'rdrop') && tick2) // an arrow over the gap in the floor
     ARROW.forEach((r, y) => [...r].forEach((ch, x) => ch === '#' && put(((TUT_GAP[0] + TUT_GAP[1]) >> 1) - 3 + x, H - 16 + y, WHITE)));
   if (tut?.step === 'lose' && tick2) for (let x = 0; x < PW; x++) put(x, HOLD_ROWS, [255, 60, 60]);
   if (carry?.at) { // what the dragged help would hit: dashed circle, or the knife's band
@@ -799,23 +831,83 @@ function paintSprite(c, s) {
   g.putImageData(d, 0, 0);
 }
 
-function drawNext() {
-  const s = next, d = nctx.createImageData(s.w, s.h);
+// A fruit in the middle of a NEXT×NEXT canvas: the next-fruit preview, and relax's slots.
+function drawFruit(g, s) {
+  g.clearRect(0, 0, NEXT, NEXT);
+  if (!s) return;
+  const d = g.createImageData(s.w, s.h);
   for (let i = 0; i < s.px.length; i++) {
     const c = PALETTE[s.px[i]];
     if (c) { d.data.set(c, i * 4); d.data[i * 4 + 3] = 255; }
   }
-  nctx.clearRect(0, 0, NEXT, NEXT);
-  nctx.putImageData(d, (NEXT - s.w) >> 1, (NEXT - s.h) >> 1);
+  g.putImageData(d, (NEXT - s.w) >> 1, (NEXT - s.h) >> 1);
+}
+const drawNext = () => drawFruit(nctx, next);
+function drawSlots() { // the dragged one dims while it shows in the well
+  for (const c of document.querySelectorAll('[data-slot]')) {
+    drawFruit(c.getContext('2d'), slots[c.dataset.slot]);
+    c.classList.toggle('held', !!piece && drag?.i === +c.dataset.slot);
+  }
 }
 
-// The selected mode's top 5 per difficulty; `rank` highlights the entry just made.
+// Relax: grab a fruit in a slot; over the well it shows at the top of the well under the finger, and letting go there
+// drops it (no control after that). Let go below the well: it stays in its slot. A quick tap on a slot turns that fruit.
+function dragTo(e) {
+  if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 12) drag.moved = true;
+  const s = slots[drag.i], r = cv.getBoundingClientRect();
+  piece = drag.moved && e.clientY < r.bottom ? { s, x: clampX(Math.round((e.clientX - r.left) / r.width * W - s.w / 2), s), y: SPAWN_Y } : null;
+  drawSlots();
+}
+// Dropped fruits can be on the way down already; a new one goes only where it doesn't overlap one still up top.
+const roomFor = p => !falling.some(f => f.x < p.x + p.s.w && p.x < f.x + f.s.w && f.y < p.y + p.s.h);
+function letGo(e) {
+  dragTo(e);
+  const d = drag; drag = null;
+  if (piece && roomFor(piece)) {
+    falling.push(piece); slots[d.i] = rndFruit();
+    if (tut?.step === 'rrotate') tutStep('rdrop');
+  } else if (!d.moved) { // a tap, however long
+    slots[d.i] = rot(slots[d.i]); sfx.rotate();
+    if (tut?.step === 'rrotate') tutStep('rdrop');
+  }
+  piece = null;
+  drawSlots();
+}
+// A tap off the slots turns the fruit dropped last while it falls (not into sand or a wall, as in rotate()).
+let tap0 = null;
+function spinLast() {
+  const p = falling.at(-1);
+  if (!p) return;
+  const s = rot(p.s), x = clampX(p.x + ((p.s.w - s.w) >> 1), s);
+  if (collides(grid, s, x, p.y)) return;
+  p.s = s; p.x = x; sfx.rotate();
+}
+function cancelDrag() { // a pause or a lost touch: the fruit goes back to its slot
+  if (!drag) return;
+  drag = null; piece = null;
+  drawSlots();
+}
+
+// The scoreboard under the menu: MY SCORES (this phone) or WORLD (everyone's, with names).
+const loadName = () => { try { return localStorage.getItem('name') || ''; } catch { return ''; } };
+let boardView = (() => { try { return localStorage.getItem('boardView') === 'world' ? 'world' : 'mine'; } catch { return 'mine'; } })();
+const MENU_ROWS = 3, LIST_ROWS = 100; // the menu shows a few (no scrolling there); a tap opens the top 100
+const esc = s => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); // names come from other players
+// One list (the chosen mode and difficulty) into listEl: rank, name, score. `rank` highlights the entry just made.
+async function fillBoard(listEl, titleEl, n, rank = -1) {
+  const id = listEl.req = (listEl.req || 0) + 1, m = mode, d = diff, world = boardView === 'world';
+  titleEl.textContent = `${t(m)}${m === 'relax' ? '' : ` · ${t(d)}`} · ${t(world ? 'world' : 'mine')}`;
+  listEl.innerHTML = '<span class="col world">…</span>';
+  let rows;
+  try { rows = world ? await topScores(m, d, n) : boards[m][d].map(v => ({ n: loadName(), v: Number(v) })); } catch { rows = null; }
+  if (id !== listEl.req) return; // the player switched lists meanwhile
+  listEl.innerHTML = `<span class="col world" data-d="${d}">${!rows ? `<span>${t('offline')}</span>` :
+    rows.slice(0, n).map((r, i) => `<span${!world && i === rank ? ' class="new"' : ''}>${i + 1}. <i>${esc(r.n)}</i> ${fmt(m, r.v)}</span>`).join('') || '<span>-</span>'}</span>`;
+}
 function drawBoard(rank = -1) {
-  $('boardTitle').textContent = `${t(mode)} · ${t(mode === 'clear' ? 'fastest' : 'topScores')}`;
-  $('board').innerHTML = Object.keys(DIFF).map(d => `<div class="col" data-d="${d}"><b>${t(d)}</b>${
-    Array.from({ length: BOARD }, (_, i) => // stored values come from localStorage: fmt() renders numbers only
-      `<span${d === diff && i === rank ? ' class="new"' : ''}>${i + 1}. ${fmt(mode, Number(boards[mode][d][i] ?? NaN))}</span>`
-    ).join('')}</div>`).join('');
+  for (const b of document.querySelectorAll('#boardTabs button')) b.classList.toggle('on', b.dataset.b === boardView);
+  fillBoard($('board'), $('boardTitle'), MENU_ROWS, rank);
+  if (view === 'scores' && !$('settings').hidden) fillBoard($('scoresList'), $('scoresTitle'), LIST_ROWS, rank);
 }
 
 // End of a game: this game's rewards, each with OPEN (then what was in it). Unopened ones wait in the 💪 window.
@@ -843,6 +935,7 @@ $('winList').addEventListener('click', e => {
 
 const info = () => mode === 'time' ? `⏱ ${clock(Math.ceil(Math.max(0, TIME_LIMIT - playT)))} · ${t('lines', lines)}`
   : mode === 'clear' ? `⏱ ${clock(playT)} · ${t('toGo', Math.max(0, CLEAR_LINES - lines))}`
+  : mode === 'relax' ? t('lines', lines)
   : `${t('lv')} ${level() + 1} · ${t('lines', lines)}`;
 
 function hud() {
@@ -873,6 +966,11 @@ function hud() {
   $('giftBtn').hidden = inGame() || !giftReady();
   $('adRandom').hidden = inGame() || giftReady() || !adReady(); // a random power-up for an ad: menu only, once the gift is taken
   $('modeInfo').textContent = t('info_' + mode);
+  const relax = mode === 'relax';
+  for (const b of document.querySelectorAll('#kind button')) b.classList.toggle('on', (b.dataset.k === 'relax') === relax);
+  for (const id of ['modes', 'diff']) $(id).hidden = $(id).previousElementSibling.hidden = relax; // and their labels
+  $('slots').hidden = !relax || !inGame(); $('pad').hidden = !$('slots').hidden; // the slots take the drag pad's place
+  $('next').style.visibility = relax ? 'hidden' : ''; // the slots show what comes
 }
 
 // Leaving a game: the ✕ button, Esc and Android's back button all ask first; back on the menu closes the app.
@@ -884,12 +982,12 @@ function askQuit() {
 
 const PLAYING = ['play', 'count', 'rescue', 'settle', 'quake', 'aim'];
 const inGame = () => PLAYING.includes(state === 'paused' ? pausedFrom : state);
-function pause() { pausedFrom = state; state = 'paused'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false; }
+function pause() { pausedFrom = state; state = 'paused'; keys.left = keys.right = keys.down = 0; g0 = null; touchFast = false; cancelDrag(); }
 function resume() { state = pausedFrom; $('quit').hidden = $('settings').hidden = true; document.activeElement?.blur(); }
 
 // The ⚙ / 🏆 window: switches, how to play, achievements, credits. Opened mid-game (or when the app
 // goes to the background) it is the pause menu until closed. `home`: the view it opened on, where BACK closes it.
-const VIEWS = ['pauseMain', 'setMain', 'about', 'welcome', 'howto', 'trophies', 'credits', 'powers'];
+const VIEWS = ['scores', 'pauseMain', 'setMain', 'about', 'welcome', 'howto', 'trophies', 'credits', 'powers'];
 const UP = { setMain: 'pauseMain', about: 'setMain', welcome: 'about', trophies: 'about', credits: 'about' }; // where BACK goes
 let view = 'setMain', home = 'setMain';
 // `atStart`: the short How to play at start-up, with DON'T SHOW THIS AGAIN instead of BACK.
@@ -915,6 +1013,7 @@ function show(v) {
   view = v;
   for (const id of VIEWS) $(id).hidden = id !== v;
   if (v === 'trophies') drawTrophies();
+  if (v === 'scores') fillBoard($('scoresList'), $('scoresTitle'), LIST_ROWS);
   $('powNote').hidden = true; // a fresh look at the 💪 window
 }
 const back = () => view === home ? closeSettings() : show(UP[view] ?? home);
@@ -986,7 +1085,9 @@ function toMenu() {
 // START: if you own a rainbow (or an ad can give one), ask whether to spend one on this game, then play.
 function start() {
   if (state === 'over' && performance.now() - overAt < 600) return; // the move that lost shouldn't restart
+  if (!$('nameBox').hidden) return; // the name first
   document.activeElement?.blur(); // else Space during play would "click" the focused button and restart
+  if (mode === 'relax' && !tutSeen('tutRelax')) return startTutorial(true); // the first Relax game is its tutorial
   if (!rainbows && !rainbowAd()) return begin(false);
   state = 'ask'; hud(); $('prestart').hidden = false;
 }
@@ -1058,7 +1159,24 @@ function fit() {
   cv.style.width = PW * scale + 'px'; cv.style.height = PH * scale + 'px';
 }
 
-for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { diff = b.dataset.d; saveDiff(); hud(); b.blur(); });
+for (const b of document.querySelectorAll('#diff button')) b.addEventListener('click', () => { diff = b.dataset.d; saveDiff(); drawBoard(); hud(); b.blur(); });
+$('board').addEventListener('click', () => openSettings('scores'));
+for (const b of document.querySelectorAll('#boardTabs button')) b.addEventListener('click', () => {
+  boardView = b.dataset.b; try { localStorage.setItem('boardView', boardView); } catch {}
+  drawBoard(); b.blur();
+});
+// The scoreboard name, asked once before the first tutorial or menu.
+function askName(then) {
+  if (loadName()) return then();
+  $('nameBox').hidden = false; $('nameIn').focus();
+  $('nameBox').onsubmit = e => {
+    e.preventDefault();
+    const name = $('nameIn').value.replace(/\s+/g, ' ').trim().slice(0, 12);
+    if (!name) return $('nameIn').focus();
+    try { localStorage.setItem('name', name); } catch {}
+    $('nameBox').hidden = true; $('nameIn').blur(); then();
+  };
+}
 $('go').addEventListener('click', () => { if (state === 'menu' || state === 'over') start(); });
 $('mmusic').addEventListener('click', () => mute('music'));
 $('msfx').addEventListener('click', () => mute('sfx'));
@@ -1078,7 +1196,7 @@ $('setX').addEventListener('click', closeSettings);
 $('setGo').addEventListener('click', closeSettings);
 $('setMenu').addEventListener('click', () => { if (state === 'paused') { $('settings').hidden = true; $('quit').hidden = false; } }); // asks first: the score is lost
 $('tutBtn').addEventListener('click', () => { if (state === 'menu' || state === 'over') startTutorial(); });
-$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep('power'); else if (tut.step === 'lose') tutStep('done'); else { toMenu(); begin(false); } }); // straight into a game, no rainbow question
+$('tutNext').addEventListener('click', () => { if (!tut) return; if (tut.step === 'cleared') tutStep(tut.relax ? 'done' : 'power'); else if (tut.step === 'lose') tutStep('done'); else { toMenu(); begin(false); } }); // straight into a game, no rainbow question
 $('tutSkip').addEventListener('click', () => { if (tut) { toMenu(); begin(false); } });
 $('noShow').addEventListener('click', () => { try { localStorage.setItem('noHowto', '1'); } catch {} closeSettings(); });
 for (const b of document.querySelectorAll('#settings [data-view]')) b.addEventListener('click', () => show(b.dataset.view));
@@ -1132,16 +1250,33 @@ App?.addListener('backButton', () => { // registering this replaces Android's de
 for (const b of document.querySelectorAll('#modes button')) b.addEventListener('click', () => {
   mode = b.dataset.m; saveMode(); drawBoard(); hud(); b.blur();
 });
+// CLASSIC | RELAX: CLASSIC comes back to the mode and difficulty picked before
+for (const b of document.querySelectorAll('#kind button')) b.addEventListener('click', () => {
+  b.blur();
+  const relax = b.dataset.k === 'relax';
+  if (relax === (mode === 'relax')) return;
+  if (relax) { try { localStorage.setItem('classicMode', mode); } catch {} mode = 'relax'; diff = 'hi'; }
+  else { try { mode = localStorage.getItem('classicMode'); } catch {} if (!MODES[mode] || mode === 'relax') mode = 'endless'; diff = loadDiff(); }
+  saveMode(); drawBoard(); hud();
+});
+$('rTut').addEventListener('click', () => { if (state === 'menu' || state === 'over') startTutorial(mode === 'relax'); }); // this tab's tutorial
 
 // Helps: tap one (in the "you lost" prompt or the 💪 window), then tap the sand: it acts where the finger
 // lifts, and sliding before lifting moves the aim. The earthquake just needs the first tap.
 addEventListener('pointerdown', e => {
   if (carry) { moveCarry(e); return; }
   if (state !== 'play' || e.target.closest('button')) return; // buttons aren't game input
-  g0 = { x: e.clientX, y: e.clientY, t: e.timeStamp, px: piece.x, axis: null };
+  if (mode === 'relax') {
+    const c = e.target.closest('[data-slot]');
+    if (c && !tut?.freeze) drag = { i: +c.dataset.slot, x: e.clientX, y: e.clientY, moved: false };
+    else if (!c) tap0 = { x: e.clientX, y: e.clientY };
+    return;
+  }
+  g0 ={ x: e.clientX, y: e.clientY, t: e.timeStamp, px: piece.x, axis: null };
 });
 addEventListener('pointermove', e => {
   if (carry) { moveCarry(e); return; }
+  if (drag) return dragTo(e);
   if (!g0) return;
   g0.lx = e.clientX; g0.ly = e.clientY;
   const dx = e.clientX - g0.x, dy = e.clientY - g0.y;
@@ -1151,22 +1286,25 @@ addEventListener('pointermove', e => {
 });
 addEventListener('pointerup', e => {
   if (carry) { moveCarry(e); return dropCarry(); } // used where the finger lifts
+  if (drag) return letGo(e);
+  if (tap0) { if (state === 'play' && Math.hypot(e.clientX - tap0.x, e.clientY - tap0.y) < 12) spinLast(); tap0 = null; return; }
   if (g0 && !g0.axis && e.timeStamp - g0.t < 300) rotate();
   g0 = null; touchFast = false;
 });
-addEventListener('pointercancel', () => { g0 = null; touchFast = false; });
+addEventListener('pointercancel', () => { g0 = null; tap0 = null; touchFast = false; cancelDrag(); });
 
 // Arrows or WASD, as in the original: ←/→ move while held, ↑ rotates, ↓ speeds up while held.
 // M toggles music, N toggles sound effects.
 const KEY = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowDown: 'down', KeyS: 'down', ArrowUp: 'up', KeyW: 'up' };
 addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return; // typing the scoreboard name
   if (e.code === 'KeyM' && !e.repeat) return mute('music');
   if (e.code === 'KeyN' && !e.repeat) return mute('sfx');
   if (!$('settings').hidden) { if (e.code === 'Escape') back(); return; } // no game keys behind it
   if (e.code === 'Escape' && state !== 'ask') return state === 'paused' ? resume() : askQuit(); // Esc = the ✕ button
   if (state === 'menu' || state === 'over') { if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); start(); } return; }
   if (state === 'ask') { if (e.code === 'Enter') begin(true); else if (e.code === 'Escape') begin(false); return; }
-  if (state !== 'play') return;
+  if (state !== 'play' || mode === 'relax') return; // relax is played by dragging
   const k = KEY[e.code];
   if (!k) return;
   e.preventDefault();
@@ -1189,4 +1327,4 @@ function loop(now) {
 }
 
 applyLang(); fit(); requestAnimationFrame(loop);
-intro(() => { toMenu(); tutSeen() ? welcome() : startTutorial(); initAds(hud); }); // the title screen covers the menu until its sand has settled
+intro(() => { toMenu(); askName(() => tutSeen() ? welcome() : startTutorial()); initAds(hud); }); // the title screen covers the menu until its sand has settled

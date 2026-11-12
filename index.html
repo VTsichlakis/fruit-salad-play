@@ -115,17 +115,21 @@
   #rescue p { margin: 0 0 10px; }
   #helps { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
   #giveup { font: inherit; color: #8a80a8; background: none; border: 2px solid #3a3350; min-height: 44px; width: 100%; cursor: pointer; }
-  #prestart, #quit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+  #nameBox { user-select: text; -webkit-user-select: text; }
+  #nameIn { font: inherit; font-size: 18px; width: 100%; box-sizing: border-box; min-height: 48px; margin-bottom: 12px; padding: 0 10px;
+    text-align: center; color: #f4e9c8; background: #0d0b14; border: 2px solid #3a3350; }
+  #nameBox #nameOk { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
+  #prestart, #quit, #nameBox { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
     width: min(320px, 92vw); box-sizing: border-box; padding: 14px; text-align: center;
     background: #1d1a28f7; border: 2px solid #fcbc3c; }
-  #prestart[hidden], #quit[hidden] { display: none; }
-  #prestart p, #quit p { margin: 0 0 12px; }
+  #prestart[hidden], #quit[hidden], #nameBox[hidden] { display: none; }
+  #prestart p, #quit p, #nameBox p { margin: 0 0 12px; }
   #rbIcon { width: 42px; height: 42px; }
   #prestart #rbGet { display: block; flex: none; min-height: 0; margin: 0 auto 8px; padding: 4px; background: none; border: none; cursor: default; }
   #prestart #rbGet.adable { cursor: pointer; }
   #prestart button:disabled { opacity: 0.35; cursor: default; }
-  #prestart div, #quit div { display: flex; gap: 10px; }
-  #prestart button, #quit button { flex: 1; font: inherit; min-height: 48px; cursor: pointer; background: #1d1a28; color: #8a80a8; border: 2px solid #3a3350; }
+  #prestart div, #quit div, #nameBox div { display: flex; gap: 10px; }
+  #prestart button, #quit button, #nameBox button { flex: 1; font: inherit; min-height: 48px; cursor: pointer; background: #1d1a28; color: #8a80a8; border: 2px solid #3a3350; }
   #prestart #rbYes, #quit #qGo { color: #0d0b14; background: #fcbc3c; border-color: #fcbc3c; }
   #quit { z-index: 6; border-color: #ce5239; }
   #settings { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 7;
@@ -180,10 +184,27 @@
   .btns [hidden] { display: none; }
   #prestart #rbX, #settings #setX, #winsX { color: #8a80a8; cursor: pointer; position: absolute; top: 2px; right: 2px; width: 44px; min-height: 44px; flex: none; padding: 0;
     font-size: 20px; background: none; border: none; }
-  #modes { display: flex; gap: 8px; margin-top: 4px; }
-  #modes button { font: inherit; font-size: 13px; min-width: 88px; min-height: 40px; color: #8a80a8; background: #1d1a28;
+  /* CLASSIC | RELAX: relax has no mode or difficulty to pick */
+  #kind { display: flex; gap: 8px; margin-top: 4px; }
+  #kind button { font: inherit; font-size: 15px; min-width: 120px; min-height: 44px; color: #8a80a8; background: #1d1a28;
     border: 2px solid #3a3350; cursor: pointer; }
-  #modes button.on { color: #f4e9c8; border-color: #f4e9c8; }
+  #kind button.on { color: #0d0b14; background: #f4e9c8; border-color: #f4e9c8; }
+  #modes[hidden], #diff[hidden], .lbl[hidden], #pad[hidden], #slots[hidden] { display: none; }
+  #goRow { display: flex; gap: 8px; }
+  #rTut { font: inherit; font-size: 22px; width: 52px; min-height: 52px; margin-top: 12px; cursor: pointer;
+    color: #fcbc3c; background: #1d1a28; border: 2px solid #fcbc3c; }
+  /* relax: three fruits under the well, dragged up into it; a tap turns one */
+  #slots { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: space-around; width: 100%; max-width: 480px;
+    padding: 0 16px; box-sizing: border-box; }
+  #slots canvas { height: min(90%, 26vw); aspect-ratio: 1; cursor: grab; touch-action: none; }
+  #slots canvas.held { opacity: 0.25; }
+  #modes, #boardTabs { display: flex; gap: 8px; margin-top: 4px; }
+  #boardTabs { margin-top: 14px; }
+  #modes button, #boardTabs button { font: inherit; font-size: 13px; min-width: 88px; min-height: 40px; color: #8a80a8; background: #1d1a28;
+    border: 2px solid #3a3350; cursor: pointer; }
+  #modes button.on, #boardTabs button.on { color: #f4e9c8; border-color: #f4e9c8; }
+  #board .col.world, #scoresList .col.world { min-width: 220px; } /* rank, name, score */
+  .world span { display: flex; gap: 8px; } .world i { flex: 1; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #boardTitle { margin: 12px 0 0; color: #8a80a8; font-size: 12px; }
   .lbl { margin: 10px 0 0; color: #8a80a8; font-size: 11px; letter-spacing: 2px; } /* MODE, DIFFICULTY, LANGUAGE */
   #overlay .lbl + div { margin-top: 0; }
@@ -207,10 +228,12 @@
   [data-d="lo"] { --c: #72b754; }
   [data-d="med"] { --c: #fcbc3c; }
   [data-d="hi"] { --c: #ce5239; }
-  #board { display: flex; gap: 18px; margin-top: 14px; font-size: 12px; }
-  #board .col { display: flex; flex-direction: column; gap: 2px; min-width: 76px; text-align: left; }
+  #board { display: flex; justify-content: center; margin-top: 6px; padding: 6px; font: inherit; font-size: 12px; color: inherit;
+    background: none; border: 1px dashed #3a3350; cursor: pointer; } /* a tap opens the top 100 */
+  #scoresList { display: flex; justify-content: center; font-size: 12px; }
+  #board .col, #scoresList .col { display: flex; flex-direction: column; gap: 2px; min-width: 76px; text-align: left; }
   #board b { color: var(--c); margin-bottom: 2px; }
-  #board .new { color: #0d0b14; background: var(--c); padding: 0 2px; }
+  #board .new, #scoresList .new { color: #0d0b14; background: var(--c); padding: 0 2px; }
 </style>
 </head>
 <body>
@@ -222,6 +245,7 @@
   <canvas id="well"></canvas>
   <div id="bar" style="visibility: hidden"><button class="help-src" data-tool="choc"><i class="ad">AD</i><canvas data-icon="choc"></canvas><b data-n="choc">3</b><span class="sr" data-t="choc"></span></button><button class="help-src" data-tool="knife"><i class="ad">AD</i><canvas data-icon="knife"></canvas><b data-n="knife">3</b><span class="sr" data-t="knife"></span></button><button class="help-src" data-tool="blend"><i class="ad">AD</i><canvas data-icon="blend"></canvas><b data-n="blend">3</b><span class="sr" data-t="blend"></span></button><button class="help-src" data-tool="quake"><i class="ad">AD</i><canvas data-icon="quake"></canvas><b data-n="quake">3</b><span class="sr" data-t="quake"></span></button></div>
   <div id="pad" data-t="drag">◀ drag ▶</div>
+  <div id="slots" hidden><canvas data-slot="0" width="36" height="36"></canvas><canvas data-slot="1" width="36" height="36"></canvas><canvas data-slot="2" width="36" height="36"></canvas></div>
   <div id="rescue" hidden>
     <p data-t="lost">YOU LOST!<br>Drag a power-up onto the sand.<br>(For the quake, just tap it.)</p>
     <div id="helps">
@@ -236,14 +260,16 @@
   <div id="overlay">
     <h1 id="title">FRUIT SALAD</h1>
     <p id="msg" hidden></p>
+    <div id="kind"><button data-k="classic" data-t="classic">CLASSIC</button><button data-k="relax" data-t="relax">RELAX</button></div>
     <p class="lbl" data-t="mode">MODE</p>
     <div id="modes"><button data-m="endless" data-t="endless">ENDLESS</button><button data-m="time" data-t="time">3 MIN</button><button data-m="clear" data-t="clear">CLEAR 40</button></div>
     <p id="modeInfo"></p>
     <p class="lbl" data-t="difficulty">DIFFICULTY</p>
     <div id="diff"><button data-d="lo" data-t="lo">EASY</button><button data-d="med" data-t="med">NORMAL</button><button data-d="hi" data-t="hi">HARD</button></div>
-    <button id="go" data-t="start">▶ START</button>
+    <div id="goRow"><button id="go" data-t="start">▶ START</button><button id="rTut" aria-label="tutorial">?</button></div>
+    <div id="boardTabs"><button data-b="mine" data-t="mine">MY SCORES</button><button data-b="world" data-t="world">WORLD</button></div>
     <p id="boardTitle"></p>
-    <div id="board"></div>
+    <button id="board" aria-label="top 100"></button>
   </div>
   <div id="prestart" hidden>
     <button id="rbX" aria-label="back to menu">✕</button>
@@ -256,6 +282,11 @@
     <button id="winsX" aria-label="close">✕</button>
     <p id="winsTitle"></p><div id="winList"></div><button id="winsOk" data-t="cont">CONTINUE</button>
   </div></div>
+  <form id="nameBox" hidden>
+    <p><label for="nameIn" data-t="nameAsk">YOUR NAME FOR THE SCOREBOARD</label></p>
+    <input id="nameIn" maxlength="12" autocomplete="nickname" required>
+    <div><button id="nameOk" data-t="nameOk">OK</button></div>
+  </form>
   <div id="quit" hidden>
     <p><span data-t="leave">LEAVE THIS GAME?</span><br><small data-t="notSaved">Your score won't be saved.</small></p>
     <div><button id="qMenu" data-t="mainMenu">MAIN MENU</button><button id="qGo" data-t="cont">CONTINUE</button></div>
@@ -263,6 +294,12 @@
   <div id="settings" role="dialog" aria-label="settings" hidden>
     <button id="setX" aria-label="close settings">✕</button>
     <!-- mid-game (⏸ or the app going to the background): only what you need to get back in or out -->
+    <!-- the scoreboard's top 100: tap the list on the menu -->
+    <div id="scores" hidden>
+      <p id="scoresTitle"></p>
+      <p id="scoresList"></p>
+      <button class="back" data-t="back">BACK</button>
+    </div>
     <div id="pauseMain" hidden>
       <p data-t="paused">PAUSED</p>
       <button id="setGo" data-t="contPlay">▶ CONTINUE</button>
